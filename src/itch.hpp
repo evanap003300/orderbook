@@ -2,10 +2,7 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <fstream>
-
-struct Itch {
-  int a;
-};
+#include <arpa/inet.h>
 
 class ItchParser {
 public:
