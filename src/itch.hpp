@@ -22,6 +22,6 @@ struct Order {
 class ItchParser {
 public:
     Order readItch();
-    Order readAddOrder();
+    Order readAddOrder(std::ifstream& file);
     void generateItch();
 };

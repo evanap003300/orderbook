@@ -1,20 +1,9 @@
 #include "itch.hpp"
 
-Order ItchParser::readItch() {
-    std::ifstream file("itch.bin", std::ios::binary);
-    char messageType;
-    file.read(&messageType, sizeof(messageType));
-    
-    switch (messageType) {
-        case 'A':
-            return readAddOrder();
-        default:
-            throw std::runtime_error("Unsupported message type");
-    }
-}
-
-Order ItchParser::readAddOrder() {
-    std::ifstream file("itch.bin", std::ios::binary);
+/*
+ * Reads an Add Order message from itch format and returns an Order struct.
+*/
+Order ItchParser::readAddOrder(std::ifstream& file) {
     uint16_t stockLocate;
     file.read(reinterpret_cast<char*>(&stockLocate), sizeof(stockLocate));
     stockLocate = ntohs(stockLocate);
@@ -63,9 +52,22 @@ Order ItchParser::readAddOrder() {
     order.orderReferenceNumberLow = orderReferenceNumberLow;
     order.buySellIndicator = buySellIndicator;
     order.shares = shares;
-    std::move(std::begin(stock), std::end(stock), std::begin(order.stock));
+    std::copy(std::begin(stock), std::end(stock), std::begin(order.stock));
     order.price = price;
     return order;
+}
+
+Order ItchParser::readItch() {
+    std::ifstream file("itch.bin", std::ios::binary);
+    char messageType;
+    file.read(&messageType, sizeof(messageType));
+    
+    switch (messageType) {
+        case 'A':
+            return readAddOrder(file);
+        default:
+            throw std::runtime_error("Unsupported message type");
+    }
 }
 
 /* 
