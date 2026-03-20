@@ -1,7 +1,71 @@
 #include "itch.hpp"
 
-void ItchParser::readItch(uint32_t order) {
-    return;
+Order ItchParser::readItch() {
+    std::ifstream file("itch.bin", std::ios::binary);
+    char messageType;
+    file.read(&messageType, sizeof(messageType));
+    
+    switch (messageType) {
+        case 'A':
+            return readAddOrder();
+        default:
+            throw std::runtime_error("Unsupported message type");
+    }
+}
+
+Order ItchParser::readAddOrder() {
+    std::ifstream file("itch.bin", std::ios::binary);
+    uint16_t stockLocate;
+    file.read(reinterpret_cast<char*>(&stockLocate), sizeof(stockLocate));
+    stockLocate = ntohs(stockLocate);
+
+    uint16_t trackingNumber;
+    file.read(reinterpret_cast<char*>(&trackingNumber), sizeof(trackingNumber));
+    trackingNumber = ntohs(trackingNumber);
+
+    uint16_t timestampHigh;
+    uint32_t timestampLow;
+    file.read(reinterpret_cast<char*>(&timestampHigh), sizeof(timestampHigh));
+    file.read(reinterpret_cast<char*>(&timestampLow), sizeof(timestampLow));
+    timestampHigh = ntohs(timestampHigh);
+    timestampLow = ntohl(timestampLow);
+    
+    uint32_t orderReferenceNumberHigh;
+    uint32_t orderReferenceNumberLow;
+    file.read(reinterpret_cast<char*>(&orderReferenceNumberHigh), sizeof(orderReferenceNumberHigh));
+    file.read(reinterpret_cast<char*>(&orderReferenceNumberLow), sizeof(orderReferenceNumberLow));
+    orderReferenceNumberHigh = ntohl(orderReferenceNumberHigh);
+    orderReferenceNumberLow = ntohl(orderReferenceNumberLow);
+
+    char buySellIndicator;
+    file.read(&buySellIndicator, sizeof(buySellIndicator));
+    
+    uint32_t shares;
+    file.read(reinterpret_cast<char*>(&shares), sizeof(shares));
+    shares = ntohl(shares);
+    
+    char stock[8];
+    file.read(stock, sizeof(stock));
+    
+    uint32_t price;
+    file.read(reinterpret_cast<char*>(&price), sizeof(price));
+    price = ntohl(price);
+
+    file.close();
+
+    Order order;
+    order.messageType = 'A';
+    order.stockLocate = stockLocate;
+    order.trackingNumber = trackingNumber;
+    order.timestampHigh = timestampHigh;
+    order.timestampLow = timestampLow;
+    order.orderReferenceNumberHigh = orderReferenceNumberHigh;
+    order.orderReferenceNumberLow = orderReferenceNumberLow;
+    order.buySellIndicator = buySellIndicator;
+    order.shares = shares;
+    std::move(std::begin(stock), std::end(stock), std::begin(order.stock));
+    order.price = price;
+    return order;
 }
 
 /* 
