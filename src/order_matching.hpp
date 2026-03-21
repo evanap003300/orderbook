@@ -18,4 +18,5 @@ public:
 
 private:
     std::vector<ItchOrderExecuted> matchTicker(const std::vector<Order>& orders);
+    void processNewOrder();
 };

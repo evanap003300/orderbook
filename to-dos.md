@@ -1,0 +1,8 @@
+- [ ] Refactor orderbook to handle continous orders
+- [ ] Generate multiple orders
+- [ ] Update itch reader to read multiple orders
+- [ ] Output the execution in itch format
+- [ ] Write a small testing suite with some edge cases 
+- [ ] Test on real data 
+- [ ] Track and store timing metrics
+- [ ] Plot results using python

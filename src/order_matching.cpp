@@ -17,8 +17,8 @@ void OrderMatching::matchOrders(const std::vector<Order>& orders) {
     }
 }
 
-
-std::vector<ItchOrderExecuted> matchTicker(const std::vector<Order>& orders) {
+// ALSO NEED TO ACCOUNT FOR TIMESTAMP TO ENSURE PROPER ORDER OF EXECUTION (make continous)
+std::vector<ItchOrderExecuted> OrderMatching::matchTicker(const std::vector<Order>& orders) {
     std::vector<ItchOrderExecuted> executedOrders;
     
     std::vector<Order> buyOrders;
@@ -73,4 +73,8 @@ std::vector<ItchOrderExecuted> matchTicker(const std::vector<Order>& orders) {
     }
 
     return executedOrders;
+}
+
+void OrderMatching::processNewOrder() {
+    
 }

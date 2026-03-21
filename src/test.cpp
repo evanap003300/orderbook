@@ -18,6 +18,6 @@ void Test::readItch() {
     printf("Order Reference Number Low: %u\n", order.orderReferenceNumberLow);
     printf("Buy/Sell Indicator: %c\n", order.buySellIndicator);
     printf("Shares: %u\n", order.shares);
-    printf("Stock: %s\n", order.stock);
+    printf("Stock: %.8s\n", order.stock);
     printf("Price: %u\n", order.price);
 }
