@@ -5,4 +5,5 @@
 - [ ] Write a small testing suite with some edge cases 
 - [ ] Test on real data 
 - [ ] Track and store timing metrics
+- [ ] Add logging 
 - [ ] Plot results using python
