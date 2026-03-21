@@ -129,7 +129,7 @@ void ItchParser::generateSyntheticOrder(std::ofstream& file, bool buyOrder, uint
 void ItchParser::generateItch(uint32_t numOrders) {
     std::ofstream file("itch.bin", std::ios::binary);
 
-    for (int i = 0; i < numOrders; i++) {
+    for (uint32_t i = 0; i < numOrders; i++) {
         generateSyntheticOrder(file, (i % 2) == 0, i + 1);
     }
 
