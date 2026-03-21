@@ -23,5 +23,8 @@ class ItchParser {
 public:
     std::vector<Order> readItch();
     Order readAddOrder(std::ifstream& file);
-    void generateItch();
+    void generateItch(uint32_t numOrders);
+
+private: 
+    void generateSyntheticOrder(std::ofstream& file, bool buyOrder, uint32_t orderReferenceNumber);
 };

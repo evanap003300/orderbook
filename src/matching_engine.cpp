@@ -27,10 +27,11 @@ void MatchingEngine::logExecutedOrders(const std::vector<ItchOrderExecuted>& exe
 }
 
 void MatchingEngine::run() {
-    // Needs to be able to read a new order
-
-    Order order; // This should be read from the input stream
-    std::string ticker = parseTicker(order);
-    std::vector<ItchOrderExecuted> executedOrders = orderBooks[ticker].handleOrder(order);
-    logExecutedOrders(executedOrders);
+    ItchParser parser;
+    auto orders = parser.readItch(); 
+    for (auto& order : orders) {
+        std::string ticker = parseTicker(order);
+        std::vector<ItchOrderExecuted> executedOrders = orderBooks[ticker].handleOrder(order);
+        logExecutedOrders(executedOrders);
+    }
 }

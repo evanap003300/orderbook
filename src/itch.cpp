@@ -78,44 +78,60 @@ std::vector<Order> ItchParser::readItch() {
     return orders;
 }
 
-/* 
- * Generates synthetic ITCH messages and writes them to a binary file.
-*/
-void ItchParser::generateItch() {
-    std::ofstream file("itch.bin", std::ios::binary);
-
+void ItchParser::generateSyntheticOrder(std::ofstream& file, bool buyOrder, uint32_t orderReferenceNumber) {
     char messageType = 'A';
     file.write(&messageType, sizeof(messageType));
 
     uint16_t stockLocate = htons(100);
     file.write(reinterpret_cast<char*>(&stockLocate), sizeof(stockLocate));
 
-    // Can skip this when parsing for efficency
     uint16_t trackingNumber = htons(0);
     file.write(reinterpret_cast<char*>(&trackingNumber), sizeof(trackingNumber));
 
+    // Add current timestamp later
     uint32_t timestampLow = htonl(0);
     uint16_t timestampHigh = htons(0);
     file.write(reinterpret_cast<char*>(&timestampHigh), sizeof(timestampHigh));
     file.write(reinterpret_cast<char*>(&timestampLow), sizeof(timestampLow));
 
-    uint32_t orderReferenceNumberLow = htonl(1234);
+    uint32_t orderReferenceNumberLow = htonl(orderReferenceNumber);
     uint32_t orderReferenceNumberHigh = htonl(0);
     file.write(reinterpret_cast<char*>(&orderReferenceNumberHigh), sizeof(orderReferenceNumberHigh));
     file.write(reinterpret_cast<char*>(&orderReferenceNumberLow), sizeof(orderReferenceNumberLow));
 
-    char buySellIndicator = 'B';
+    // Randomize buy/sell indicator
+    char buySellIndicator = buyOrder ? 'B' : 'S';
     file.write(&buySellIndicator, sizeof(buySellIndicator));
 
-    uint32_t shares = htonl(1000);
+    // Randomize shares
+    uint32_t sharesRandom = std::rand();
+    uint32_t shares = htonl(sharesRandom);
     file.write(reinterpret_cast<char*>(&shares), sizeof(shares));
 
-    char stock[8] = "AAPL   ";
-    stock[7] = ' '; 
+    // Pick a random ticker
+    std::vector<std::string> tickers = {
+        "AAPL", "MSFT", "GOOGL", "AMZN", "NVDA", "TSLA", "META"
+    };
+    std::string chosenTicker = tickers[std::rand() % tickers.size()];
+    char stock[8] = {' ', ' ', ' ', ' ', ' ', ' ', ' ', ' '};
+    std::copy(chosenTicker.begin(), chosenTicker.end(), stock);
     file.write(stock, sizeof(stock));
 
-    uint32_t price = htonl(15000);
+    // Randomize Price
+    uint32_t priceRandom = 14900 + (std::rand() % 200);
+    uint32_t price = htonl(priceRandom);
     file.write(reinterpret_cast<char*>(&price), sizeof(price));
+}
+
+/* 
+ * Generates synthetic ITCH messages and writes them to a binary file.
+*/
+void ItchParser::generateItch(uint32_t numOrders) {
+    std::ofstream file("itch.bin", std::ios::binary);
+
+    for (int i = 0; i < numOrders; i++) {
+        generateSyntheticOrder(file, (i % 2) == 0, i + 1);
+    }
 
     file.close();
 }

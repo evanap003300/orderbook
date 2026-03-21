@@ -1,8 +1,7 @@
-#include "test.hpp"
+#include "matching_engine.hpp"
 
 int main() {    
-    Test test{};
-    test.generateItch();
-    test.readItch();
+    MatchingEngine engine;
+    engine.run();
     return 0;
 }
