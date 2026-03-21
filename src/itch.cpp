@@ -40,8 +40,6 @@ Order ItchParser::readAddOrder(std::ifstream& file) {
     file.read(reinterpret_cast<char*>(&price), sizeof(price));
     price = ntohl(price);
 
-    file.close();
-
     Order order;
     order.messageType = 'A';
     order.stockLocate = stockLocate;
@@ -57,17 +55,27 @@ Order ItchParser::readAddOrder(std::ifstream& file) {
     return order;
 }
 
-Order ItchParser::readItch() {
+std::vector<Order> ItchParser::readItch() {
     std::ifstream file("itch.bin", std::ios::binary);
-    char messageType;
-    file.read(&messageType, sizeof(messageType));
-    
-    switch (messageType) {
-        case 'A':
-            return readAddOrder(file);
-        default:
-            throw std::runtime_error("Unsupported message type");
+
+    if (!file.is_open()) {
+        throw std::runtime_error("Could not open file");
     }
+    
+    std::vector<Order> orders;
+    char messageType;
+    while (file.read(&messageType, sizeof(messageType))) {
+        switch (messageType) {
+            case 'A':
+                orders.push_back(readAddOrder(file));
+                break;
+            default:
+                throw std::runtime_error("Unsupported message type");
+        }
+    }
+
+    file.close();
+    return orders;
 }
 
 /* 
