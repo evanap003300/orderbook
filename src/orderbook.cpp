@@ -17,12 +17,12 @@ std::vector<ItchOrderExecuted> OrderBook::handleBuyOrder(Order& buyOrder) {
             ItchOrderExecuted executedOrder;
             executedOrder.message_type = 'E';
             executedOrder.stock_locate = buyOrder.stockLocate;
-            executedOrder.tracking_number = 0;
-            executedOrder.timestamp_high = 0; // get the current time here
-            executedOrder.timestamp_low = 0;
+            executedOrder.tracking_number = std::rand();
+            executedOrder.timestamp_high = buyOrder.timestampHigh;
+            executedOrder.timestamp_low = buyOrder.timestampLow;
             executedOrder.order_reference_number = (static_cast<uint64_t>(sellOrder.orderReferenceNumberHigh) << 32) | sellOrder.orderReferenceNumberLow;
             executedOrder.executed_shares = executedShares;
-            executedOrder.match_number = 0; 
+            executedOrder.match_number = std::rand(); 
             executedOrders.push_back(executedOrder);
 
             buyOrder.shares -= executedShares;
@@ -63,12 +63,12 @@ std::vector<ItchOrderExecuted> OrderBook::handleSellOrder(Order& sellOrder) {
             ItchOrderExecuted executedOrder;
             executedOrder.message_type = 'E';
             executedOrder.stock_locate = sellOrder.stockLocate;
-            executedOrder.tracking_number = 0;
-            executedOrder.timestamp_high = 0; // get the current time here
-            executedOrder.timestamp_low = 0;
+            executedOrder.tracking_number = std::rand();
+            executedOrder.timestamp_high = sellOrder.timestampHigh; 
+            executedOrder.timestamp_low = sellOrder.timestampLow;
             executedOrder.order_reference_number = (static_cast<uint64_t>(buyOrder.orderReferenceNumberHigh) << 32) | buyOrder.orderReferenceNumberLow;
             executedOrder.executed_shares = executedShares;
-            executedOrder.match_number = 0; 
+            executedOrder.match_number = std::rand(); 
             executedOrders.push_back(executedOrder);
 
             buyOrder.shares -= executedShares;
