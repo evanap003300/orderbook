@@ -11,5 +11,5 @@ add_executable(order_matching
                 src/matching_engine.cpp
                 src/orderbook.cpp
                 )
-target_include_directories(order_matching PRIVATE src)
+target_include_directories(order_matching PRIVATE include)
 target_compile_options(order_matching PRIVATE -O3 -Wall -Wextra -march=native)
