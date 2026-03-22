@@ -1,0 +1,15 @@
+# Matching Engine — Built for Speed
+
+## Status
+* Just finished writing the intial matching engine with synthetic data testing 
+* Currently operating at ~2 million orders per second
+* Using pretty optimal data structures and algorithims
+* Need to enhance the infra and optimize at the hardware level
+
+## To-dos:
+- [ ] Write a small testing suite with some edge cases 
+- [ ] Test on real data 
+- [ ] Track and store timing metrics with production tracking
+- [ ] Add fast logging
+- [ ] Plot results using python
+- [ ] Make it faster (custom memory management, cache allignment, core pinning, and more)

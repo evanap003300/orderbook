@@ -3,7 +3,7 @@
 
 int main() {    
     std::cout << "Generating synthetic ITCH data...\n";
-    const uint32_t numOrders = 10000;
+    const uint32_t numOrders = 1000000;
     ItchParser parser;
     parser.generateItch(numOrders);
 
@@ -15,7 +15,7 @@ int main() {
     auto end = std::chrono::high_resolution_clock::now();
 
     auto elapsed = end - start;
-    std::cout << "Matching engine completed in " << elapsed.count() << " milliseconds.\n";
+    std::cout << "Matching engine completed in " << elapsed.count() << " nanoseconds.\n";
     
     return 0;
 }

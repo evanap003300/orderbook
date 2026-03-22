@@ -24,6 +24,6 @@ void MatchingEngine::run() {
     for (auto& order : orders) {
         std::string ticker = parseTicker(order);
         std::vector<ItchOrderExecuted> executedOrders = orderBooks[ticker].handleOrder(order);
-        logExecutedOrders(executedOrders);
+        //logExecutedOrders(executedOrders);
     }
 }
