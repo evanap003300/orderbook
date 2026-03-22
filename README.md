@@ -12,4 +12,7 @@
 - [ ] Track and store timing metrics with production tracking
 - [ ] Add fast logging
 - [ ] Plot results using python
+- [ ] Set up CI/CD with Github Actions (Linter, Tests, Formater)
 - [ ] Make it faster (custom memory management, cache allignment, core pinning, and more)
+- [ ] Add resilence with a redundent engine
+- [ ] Add a risk gateway to remove outliers
