@@ -57,22 +57,31 @@ Order ItchParser::readAddOrder(std::ifstream& file) {
   return order;
 }
 
-std::vector<Order> ItchParser::readItch() {
-  std::ifstream file("itch.bin", std::ios::binary);
+std::vector<Order> ItchParser::readItch(std::string fileName) {
+  std::ifstream file(fileName, std::ios::binary);
 
   if (!file.is_open()) {
     throw std::runtime_error("Could not open file");
   }
 
   std::vector<Order> orders;
+  uint32_t capacity = 100000;
+  uint16_t messageLength;
   char messageType;
-  while (file.read(&messageType, sizeof(messageType))) {
+  while (file.read(reinterpret_cast<char*>(&messageLength),
+                   sizeof(messageLength))) {
+    messageLength = ntohs(messageLength);
+    file.read(&messageType, sizeof(messageType));
+
     switch (messageType) {
       case 'A':
-        orders.push_back(readAddOrder(file));
+        if (orders.size() < capacity) {
+          orders.push_back(readAddOrder(file));
+        }
         break;
       default:
-        throw std::runtime_error("Unsupported message type");
+        file.seekg(messageLength - 1, std::ios::cur);
+        break;
     }
   }
 
@@ -82,6 +91,9 @@ std::vector<Order> ItchParser::readItch() {
 
 void ItchParser::generateSyntheticOrder(std::ofstream& file, bool buyOrder,
                                         uint32_t orderReferenceNumber) {
+  uint16_t messageLength = htons(36);
+  file.write(reinterpret_cast<char*>(&messageLength), sizeof(messageLength));
+
   char messageType = 'A';
   file.write(&messageType, sizeof(messageType));
 

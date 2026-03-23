@@ -72,7 +72,7 @@ TEST_F(MatchingEngineTest, PlacesAskOrder) {
 TEST_F(MatchingEngineTest, ReadsInOrders) {
   const uint32_t numOrders = 1000;
   parser.generateItch(numOrders);
-  auto orders = parser.readItch();
+  auto orders = parser.readItch("itch.bin");
   EXPECT_EQ(orders.size(), numOrders);
 }
 

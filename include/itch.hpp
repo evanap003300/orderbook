@@ -23,7 +23,7 @@ struct Order {
 
 class ItchParser {
  public:
-  std::vector<Order> readItch();
+  std::vector<Order> readItch(std::string fileName);
   Order readAddOrder(std::ifstream& file);
   void generateItch(uint32_t numOrders);
 

@@ -21,7 +21,7 @@ void MatchingEngine::logExecutedOrders(
 
 void MatchingEngine::run() {
   ItchParser parser;
-  auto orders = parser.readItch();
+  auto orders = parser.readItch("itch_data.NASDAQ_ITCH50");
   for (auto& order : orders) {
     std::string ticker = parseTicker(order);
     std::vector<ItchOrderExecuted> executedOrders =

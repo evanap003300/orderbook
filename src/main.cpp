@@ -5,10 +5,10 @@
 #include "matching_engine.hpp"
 
 int main() {
-  std::cout << "Generating synthetic ITCH data...\n";
+  /*std::cout << "Generating synthetic ITCH data...\n";
   const uint32_t numOrders = 1000000;
   ItchParser parser;
-  parser.generateItch(numOrders);
+  parser.generateItch(numOrders); */
 
   std::cout << "Running matching engine...\n";
   MatchingEngine engine;
