@@ -1,23 +1,25 @@
-#include "matching_engine.hpp"
+#include <chrono>
 #include <iostream>
 #include <vector>
-#include <chrono>
 
-int main() {    
-    std::cout << "Generating synthetic ITCH data...\n";
-    const uint32_t numOrders = 1000000;
-    ItchParser parser;
-    parser.generateItch(numOrders);
+#include "matching_engine.hpp"
 
-    std::cout << "Running matching engine...\n";
-    MatchingEngine engine;
+int main() {
+  std::cout << "Generating synthetic ITCH data...\n";
+  const uint32_t numOrders = 1000000;
+  ItchParser parser;
+  parser.generateItch(numOrders);
 
-    auto start = std::chrono::high_resolution_clock::now();
-    engine.run();
-    auto end = std::chrono::high_resolution_clock::now();
+  std::cout << "Running matching engine...\n";
+  MatchingEngine engine;
 
-    auto elapsed = end - start;
-    std::cout << "Matching engine completed in " << elapsed.count() << " nanoseconds.\n";
-    
-    return 0;
+  auto start = std::chrono::high_resolution_clock::now();
+  engine.run();
+  auto end = std::chrono::high_resolution_clock::now();
+
+  auto elapsed = end - start;
+  std::cout << "Matching engine completed in " << elapsed.count()
+            << " nanoseconds.\n";
+
+  return 0;
 }
