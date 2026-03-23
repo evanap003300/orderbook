@@ -3,6 +3,7 @@
 #include <stdint.h>
 #include <map>                                                                                                                                                                   
 #include <deque> 
+#include <vector>
 
 struct ItchOrderExecuted {
     char message_type;       

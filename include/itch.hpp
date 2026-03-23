@@ -4,6 +4,7 @@
 #include <fstream>
 #include <arpa/inet.h>
 #include <string>
+#include <vector>
 
 struct Order {
     char messageType;
