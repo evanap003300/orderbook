@@ -1,5 +1,7 @@
 #include "matching_engine.hpp"
 #include <iostream>
+#include <vector>
+#include <chrono>
 
 int main() {    
     std::cout << "Generating synthetic ITCH data...\n";
