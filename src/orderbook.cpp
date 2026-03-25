@@ -117,7 +117,7 @@ void OrderBook::deleteOrder(DeleteOrder& order) {
       (static_cast<uint64_t>(order.orderReferenceNumberHigh) << 32) |
       order.orderReferenceNumberLow;
   if (orderMap.find(orderRefNum) == orderMap.end()) {
-    throw std::runtime_error("Order not found for deletion");
+    return;
   }
 
   Order deleteOrder = orderMap[orderRefNum];

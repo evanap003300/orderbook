@@ -1,6 +1,6 @@
 #include "matching_engine.hpp"
 
-uint64_t getTickerAsInt(const Order& order) {
+uint64_t MatchingEngine::getTickerAsInt(const Order& order) {
   uint64_t tickerInt = 0;
   memcpy(&tickerInt, order.stock, 8);
   return tickerInt;
@@ -28,6 +28,8 @@ void MatchingEngine::run() {
   uint64_t ticker;
   std::vector<ItchOrderExecuted> executedOrders;
   Order order;
+  DeleteOrder deleteOrder;
+  uint64_t orderReferenceNumber;
 
   while (file.read(reinterpret_cast<char*>(&messageLength),
                    sizeof(messageLength))) {
@@ -39,8 +41,26 @@ void MatchingEngine::run() {
         order = parser.readAddOrder(file);
         ticker = getTickerAsInt(order);
         executedOrders = orderBooks[ticker].handleOrder(order);
-        logExecutedOrders(executedOrders);
+        orderReferenceNumber =
+            (static_cast<uint64_t>(order.orderReferenceNumberHigh) << 32) |
+            order.orderReferenceNumberLow;
+        orderMap[orderReferenceNumber] = order;
+        // logExecutedOrders(executedOrders);
         break;
+      case 'D': {
+        deleteOrder = parser.readDeleteOrder(file);
+        orderReferenceNumber =
+            (static_cast<uint64_t>(deleteOrder.orderReferenceNumberHigh)
+             << 32) |
+            deleteOrder.orderReferenceNumberLow;
+        if (!orderMap.count(orderReferenceNumber)) {
+          break;
+        }
+        order = orderMap[orderReferenceNumber];
+        ticker = getTickerAsInt(order);
+        orderBooks[ticker].handleDeleteOrder(deleteOrder);
+        break;
+      }
       default:
         file.seekg(messageLength - 1, std::ios::cur);
         break;

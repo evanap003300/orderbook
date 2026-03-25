@@ -21,13 +21,13 @@ struct ItchOrderExecuted {
 class OrderBook {
  public:
   std::vector<ItchOrderExecuted> handleOrder(Order& order);
+  void handleDeleteOrder(DeleteOrder& order);
 
  private:
+  std::unordered_map<uint64_t, Order> orderMap;
   std::map<uint32_t, std::deque<Order>, std::greater<uint32_t>> bids;
   std::map<uint32_t, std::deque<Order>> asks;
-  std::unordered_map<uint64_t, Order> orderMap;
   std::vector<ItchOrderExecuted> handleBuyOrder(Order& order);
   std::vector<ItchOrderExecuted> handleSellOrder(Order& order);
   void deleteOrder(DeleteOrder& order);
-  void handleDeleteOrder(DeleteOrder& order);
 };

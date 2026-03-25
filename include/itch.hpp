@@ -36,11 +36,9 @@ class ItchParser {
   std::vector<Order> readItch(std::string fileName);
   Order readAddOrder(std::ifstream& file);
   void generateItch(uint32_t numOrders);
+  DeleteOrder readDeleteOrder(std::ifstream& file);
 
  private:
   void generateSyntheticOrder(std::ofstream& file, bool buyOrder,
                               uint32_t orderReferenceNumber);
-
-  uint64_t getTickerAsInt(const Order& order);
-  DeleteOrder readDeleteOrder(std::ifstream& file);
 };
