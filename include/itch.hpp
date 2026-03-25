@@ -21,6 +21,16 @@ struct Order {
   uint32_t price;
 };
 
+struct DeleteOrder {
+  char messageType;
+  uint16_t stockLocate;
+  uint16_t trackingNumber;
+  uint16_t timestampHigh;
+  uint32_t timestampLow;
+  uint32_t orderReferenceNumberHigh;
+  uint32_t orderReferenceNumberLow;
+};
+
 class ItchParser {
  public:
   std::vector<Order> readItch(std::string fileName);
@@ -32,4 +42,5 @@ class ItchParser {
                               uint32_t orderReferenceNumber);
 
   uint64_t getTickerAsInt(const Order& order);
+  DeleteOrder readDeleteOrder(std::ifstream& file);
 };

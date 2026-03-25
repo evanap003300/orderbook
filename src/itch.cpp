@@ -1,5 +1,42 @@
 #include "itch.hpp"
 
+DeleteOrder ItchParser::readDeleteOrder(std::ifstream& file) {
+  uint16_t stockLocate;
+  file.read(reinterpret_cast<char*>(&stockLocate), sizeof(stockLocate));
+  stockLocate = ntohs(stockLocate);
+
+  uint16_t trackingNumber;
+  file.read(reinterpret_cast<char*>(&trackingNumber), sizeof(trackingNumber));
+  trackingNumber = ntohs(trackingNumber);
+
+  uint16_t timestampHigh;
+  uint32_t timestampLow;
+  file.read(reinterpret_cast<char*>(&timestampHigh), sizeof(timestampHigh));
+  file.read(reinterpret_cast<char*>(&timestampLow), sizeof(timestampLow));
+  timestampHigh = ntohs(timestampHigh);
+  timestampLow = ntohl(timestampLow);
+
+  uint32_t orderReferenceNumberHigh;
+  uint32_t orderReferenceNumberLow;
+  file.read(reinterpret_cast<char*>(&orderReferenceNumberHigh),
+            sizeof(orderReferenceNumberHigh));
+  file.read(reinterpret_cast<char*>(&orderReferenceNumberLow),
+            sizeof(orderReferenceNumberLow));
+  orderReferenceNumberHigh = ntohl(orderReferenceNumberHigh);
+  orderReferenceNumberLow = ntohl(orderReferenceNumberLow);
+
+  DeleteOrder order;
+  order.messageType = 'D';
+  order.stockLocate = stockLocate;
+  order.trackingNumber = trackingNumber;
+  order.timestampHigh = timestampHigh;
+  order.timestampLow = timestampLow;
+  order.orderReferenceNumberHigh = orderReferenceNumberHigh;
+  order.orderReferenceNumberLow = orderReferenceNumberLow;
+
+  return order;
+}
+
 /*
  * Reads an Add Order message from itch format and returns an Order struct.
  */

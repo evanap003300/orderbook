@@ -31,7 +31,11 @@ std::vector<ItchOrderExecuted> OrderBook::handleBuyOrder(Order& buyOrder) {
       sellOrder.shares -= executedShares;
 
       if (sellOrder.shares == 0) {
+        uint64_t orderRefNum =
+            (static_cast<uint64_t>(sellOrder.orderReferenceNumberHigh) << 32) |
+            sellOrder.orderReferenceNumberLow;
         currentAsks.pop_front();
+        orderMap.erase(orderRefNum);
       }
     }
 
@@ -43,6 +47,10 @@ std::vector<ItchOrderExecuted> OrderBook::handleBuyOrder(Order& buyOrder) {
   // Add order if not empty
   if (buyOrder.shares > 0) {
     bids[buyOrder.price].push_back(buyOrder);
+    uint64_t orderRefNum =
+        (static_cast<uint64_t>(buyOrder.orderReferenceNumberHigh) << 32) |
+        buyOrder.orderReferenceNumberLow;
+    orderMap[orderRefNum] = buyOrder;
   }
 
   return executedOrders;
@@ -79,7 +87,11 @@ std::vector<ItchOrderExecuted> OrderBook::handleSellOrder(Order& sellOrder) {
       sellOrder.shares -= executedShares;
 
       if (buyOrder.shares == 0) {
+        uint64_t orderRefNum =
+            (static_cast<uint64_t>(buyOrder.orderReferenceNumberHigh) << 32) |
+            buyOrder.orderReferenceNumberLow;
         currentBids.pop_front();
+        orderMap.erase(orderRefNum);
       }
     }
 
@@ -91,9 +103,45 @@ std::vector<ItchOrderExecuted> OrderBook::handleSellOrder(Order& sellOrder) {
   // Add order if not empty
   if (sellOrder.shares > 0) {
     asks[sellOrder.price].push_back(sellOrder);
+    uint64_t orderRefNum =
+        (static_cast<uint64_t>(sellOrder.orderReferenceNumberHigh) << 32) |
+        sellOrder.orderReferenceNumberLow;
+    orderMap[orderRefNum] = sellOrder;
   }
 
   return executedOrders;
+}
+
+void OrderBook::deleteOrder(DeleteOrder& order) {
+  uint64_t orderRefNum =
+      (static_cast<uint64_t>(order.orderReferenceNumberHigh) << 32) |
+      order.orderReferenceNumberLow;
+  if (orderMap.find(orderRefNum) == orderMap.end()) {
+    throw std::runtime_error("Order not found for deletion");
+  }
+
+  Order deleteOrder = orderMap[orderRefNum];
+
+  auto& ordersAtPrice = deleteOrder.buySellIndicator == 'B'
+                            ? bids[deleteOrder.price]
+                            : asks[deleteOrder.price];
+
+  for (auto it = ordersAtPrice.begin(); it != ordersAtPrice.end(); ++it) {
+    if (it->orderReferenceNumberHigh == deleteOrder.orderReferenceNumberHigh &&
+        it->orderReferenceNumberLow == deleteOrder.orderReferenceNumberLow) {
+      ordersAtPrice.erase(it);
+      if (ordersAtPrice.empty()) {
+        if (deleteOrder.buySellIndicator == 'B') {
+          bids.erase(deleteOrder.price);
+        } else {
+          asks.erase(deleteOrder.price);
+        }
+      }
+      break;
+    }
+  }
+
+  orderMap.erase(orderRefNum);
 }
 
 std::vector<ItchOrderExecuted> OrderBook::handleOrder(Order& order) {
@@ -105,3 +153,5 @@ std::vector<ItchOrderExecuted> OrderBook::handleOrder(Order& order) {
     throw std::runtime_error("Invalid buy/sell indicator");
   }
 }
+
+void OrderBook::handleDeleteOrder(DeleteOrder& order) { deleteOrder(order); }
