@@ -1,15 +1,9 @@
 #include "matching_engine.hpp"
 
-std::string MatchingEngine::parseTicker(Order& order) {
-  std::string ticker = "";
-  for (int i = 0; i < 8; i++) {
-    if (order.stock[i] == ' ') {
-      return ticker;
-    } else {
-      ticker.push_back(order.stock[i]);
-    }
-  }
-  return ticker;
+uint64_t getTickerAsInt(const Order& order) {
+  uint64_t tickerInt = 0;
+  memcpy(&tickerInt, order.stock, 8);
+  return tickerInt;
 }
 
 void MatchingEngine::logExecutedOrders(
@@ -20,12 +14,38 @@ void MatchingEngine::logExecutedOrders(
 }
 
 void MatchingEngine::run() {
+  std::string fileName = "itch_data.NASDAQ_ITCH50";
   ItchParser parser;
-  auto orders = parser.readItch("itch_data.NASDAQ_ITCH50");
-  for (auto& order : orders) {
-    std::string ticker = parseTicker(order);
-    std::vector<ItchOrderExecuted> executedOrders =
-        orderBooks[ticker].handleOrder(order);
-    // logExecutedOrders(executedOrders);
+
+  std::ifstream file(fileName, std::ios::binary);
+
+  if (!file.is_open()) {
+    throw std::runtime_error("Could not open file");
   }
+
+  uint16_t messageLength;
+  char messageType;
+  uint64_t ticker;
+  std::vector<ItchOrderExecuted> executedOrders;
+  Order order;
+
+  while (file.read(reinterpret_cast<char*>(&messageLength),
+                   sizeof(messageLength))) {
+    messageLength = ntohs(messageLength);
+    file.read(&messageType, sizeof(messageType));
+
+    switch (messageType) {
+      case 'A':
+        order = parser.readAddOrder(file);
+        ticker = getTickerAsInt(order);
+        executedOrders = orderBooks[ticker].handleOrder(order);
+        logExecutedOrders(executedOrders);
+        break;
+      default:
+        file.seekg(messageLength - 1, std::ios::cur);
+        break;
+    }
+  }
+
+  file.close();
 }

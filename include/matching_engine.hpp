@@ -9,7 +9,6 @@ class MatchingEngine {
   void run();
 
  private:
-  std::unordered_map<std::string, OrderBook> orderBooks;
-  std::string parseTicker(Order& order);
+  std::unordered_map<uint64_t, OrderBook> orderBooks;
   void logExecutedOrders(const std::vector<ItchOrderExecuted>& executedOrders);
 };

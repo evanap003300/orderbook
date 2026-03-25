@@ -7,6 +7,7 @@
 * Need to enhance the infra and optimize at the hardware level
 
 ## To-dos:
+- [ ] Process one order at a time 
 - [ ] Track and store timing metrics with production tracking
 - [ ] Add fast logging
 - [ ] Add support for more order types 

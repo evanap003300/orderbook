@@ -30,4 +30,6 @@ class ItchParser {
  private:
   void generateSyntheticOrder(std::ofstream& file, bool buyOrder,
                               uint32_t orderReferenceNumber);
+
+  uint64_t getTickerAsInt(const Order& order);
 };
