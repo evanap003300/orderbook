@@ -8,6 +8,8 @@
 
 ## To-dos:
 - [ ] Add support for deletion of orders
+- [ ] Remove tech debt
+- [ ] Update tests to handle real data and deletions
 - [ ] Track and store timing metrics with production tracking
 - [ ] Add fast logging
 - [ ] Plot results using python
