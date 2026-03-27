@@ -45,7 +45,6 @@ void MatchingEngine::run() {
             (static_cast<uint64_t>(order.orderReferenceNumberHigh) << 32) |
             order.orderReferenceNumberLow;
         orderMap[orderReferenceNumber] = order;
-        // logExecutedOrders(executedOrders);
         break;
       case 'D': {
         deleteOrder = parser.readDeleteOrder(file);

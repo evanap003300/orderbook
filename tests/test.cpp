@@ -143,3 +143,21 @@ TEST_F(MatchingEngineTest, NoMatchLowBid) {
       orderBook.handleOrder(askOrder);
   EXPECT_TRUE(executedOrders.empty());
 }
+
+TEST_F(MatchingEngineTest, DeleteOrder) {
+  orderBook.handleOrder(bidOrder);
+  DeleteOrder deleteOrder;
+  deleteOrder.messageType = 'D';
+  deleteOrder.stockLocate = 1;
+  deleteOrder.trackingNumber = 3;
+  deleteOrder.timestampHigh = 0;
+  deleteOrder.timestampLow = 0;
+  deleteOrder.orderReferenceNumberHigh = 0;
+  deleteOrder.orderReferenceNumberLow = 1;
+
+  orderBook.handleDeleteOrder(deleteOrder);
+
+  std::vector<ItchOrderExecuted> executedOrders =
+      orderBook.handleOrder(askOrder);
+  EXPECT_TRUE(executedOrders.empty());
+}
