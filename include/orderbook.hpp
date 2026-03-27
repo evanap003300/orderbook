@@ -3,6 +3,7 @@
 
 #include <deque>
 #include <map>
+#include <unordered_map>
 #include <vector>
 
 #include "itch.hpp"
