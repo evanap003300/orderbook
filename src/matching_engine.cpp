@@ -37,15 +37,20 @@ void MatchingEngine::run() {
     file.read(&messageType, sizeof(messageType));
 
     switch (messageType) {
-      case 'A':
+      case 'A': {
         order = parser.readAddOrder(file);
         ticker = getTickerAsInt(order);
+        auto start = std::chrono::high_resolution_clock::now();
         executedOrders = orderBooks[ticker].handleOrder(order);
         orderReferenceNumber =
             (static_cast<uint64_t>(order.orderReferenceNumberHigh) << 32) |
             order.orderReferenceNumberLow;
         orderMap[orderReferenceNumber] = order;
+        auto end = std::chrono::high_resolution_clock::now();
+        auto latency = end - start;
+        latencies.push_back(latency.count());
         break;
+      }
       case 'D': {
         deleteOrder = parser.readDeleteOrder(file);
         orderReferenceNumber =

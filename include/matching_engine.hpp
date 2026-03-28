@@ -8,6 +8,8 @@
 
 class MatchingEngine {
  public:
+  std::vector<uint64_t> latencies;
+  MatchingEngine() { latencies.reserve(1000000); }
   void run();
 
  private:

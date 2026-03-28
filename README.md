@@ -8,9 +8,9 @@
 
 ## To-dos:
 - [ ] Track and store timing metrics with production tracking
-- [ ] Add fast logging
 - [ ] Plot results using python
 - [ ] Make it faster (custom memory management, cache allignment, core pinning, and more)
 - [ ] Add support for more order types 
+- [ ] Add fast logging
 - [ ] Add resilence with a redundent engine
 - [ ] Add a risk gateway to remove outliers
