@@ -31,10 +31,21 @@ void MatchingEngine::run() {
   DeleteOrder deleteOrder;
   uint64_t orderReferenceNumber;
 
+  file.seekg(0, std::ios::end);
+  auto fileSize = file.tellg();
+  file.seekg(0, std::ios::beg);
+
+  uint64_t messageCount = 0;
+
   while (file.read(reinterpret_cast<char*>(&messageLength),
                    sizeof(messageLength))) {
     messageLength = ntohs(messageLength);
     file.read(&messageType, sizeof(messageType));
+
+    messageCount++;
+    if (messageCount % 1000000 == 0) {
+      printf("Progress: %.1f%%\n", (double)file.tellg() / fileSize * 100);
+    }
 
     switch (messageType) {
       case 'A': {
@@ -45,7 +56,7 @@ void MatchingEngine::run() {
         orderReferenceNumber =
             (static_cast<uint64_t>(order.orderReferenceNumberHigh) << 32) |
             order.orderReferenceNumberLow;
-        orderMap[orderReferenceNumber] = order;
+        orderMap[orderReferenceNumber] = ticker;
         auto end = std::chrono::high_resolution_clock::now();
         auto latency = end - start;
         latencies.push_back(latency.count());
@@ -60,8 +71,7 @@ void MatchingEngine::run() {
         if (!orderMap.count(orderReferenceNumber)) {
           break;
         }
-        order = orderMap[orderReferenceNumber];
-        ticker = getTickerAsInt(order);
+        ticker = orderMap[orderReferenceNumber];
         orderBooks[ticker].handleDeleteOrder(deleteOrder);
         break;
       }
