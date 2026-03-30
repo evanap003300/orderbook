@@ -1,5 +1,12 @@
 #include "matching_engine.hpp"
 
+// Use cpu timestamp counter for latency measurement
+inline uint64_t MatchingEngine::rdtsc() {
+  unsigned int lo, hi;
+  __asm__ __volatile__("rdtsc" : "=a"(lo), "=d"(hi));
+  return ((uint64_t)hi << 32) | lo;
+}
+
 uint64_t MatchingEngine::getTickerAsInt(const Order& order) {
   uint64_t tickerInt = 0;
   memcpy(&tickerInt, order.stock, 8);

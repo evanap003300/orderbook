@@ -17,4 +17,5 @@ class MatchingEngine {
   std::unordered_map<uint64_t, OrderBook> orderBooks;
   void logExecutedOrders(const std::vector<ItchOrderExecuted>& executedOrders);
   uint64_t getTickerAsInt(const Order& order);
+  inline uint64_t rdtsc();
 };

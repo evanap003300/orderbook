@@ -14,10 +14,12 @@ int main() {
   engine.run();
   auto end = std::chrono::high_resolution_clock::now();
 
-  auto elapsed = end - start;
-  std::cout << "Matching engine completed in " << elapsed.count()
-            << " nanoseconds.\n";
-
   std::cout << "Stored: " << engine.latencies.size() << " latencies.";
+
+  std::ofstream latencyFile("latencies.txt");
+  for (const auto& latency : engine.latencies) {
+    latencyFile << latency << "\n";
+  }
+  latencyFile.close();
   return 0;
 }
