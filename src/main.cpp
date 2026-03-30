@@ -10,11 +10,9 @@ int main() {
   std::cout << "Running matching engine...\n";
   MatchingEngine engine;
 
-  auto start = std::chrono::high_resolution_clock::now();
   engine.run();
-  auto end = std::chrono::high_resolution_clock::now();
 
-  std::cout << "Stored: " << engine.latencies.size() << " latencies.";
+  std::cout << "Saving latencies...\n";
 
   std::ofstream latencyFile("latencies.txt");
   for (const auto& latency : engine.latencies) {

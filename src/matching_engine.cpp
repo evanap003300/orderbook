@@ -2,9 +2,10 @@
 
 // Use cpu timestamp counter for latency measurement
 inline uint64_t MatchingEngine::rdtsc() {
-  unsigned int lo, hi;
+  /*unsigned int lo, hi;
   __asm__ __volatile__("rdtsc" : "=a"(lo), "=d"(hi));
-  return ((uint64_t)hi << 32) | lo;
+  return ((uint64_t)hi << 32) | lo; */
+  return 0;
 }
 
 uint64_t MatchingEngine::getTickerAsInt(const Order& order) {

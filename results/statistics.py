@@ -1,18 +1,13 @@
-def get_stats():
-    latencies = []
+import numpy as np
 
-    # Read latencies from file
-    with open('latencies.txt', 'r') as f:
-        for line in f:
-            latencies.append(float(line.strip()))
+def load_latencies(filename):
+    return np.loadtxt(filename)
 
-    # Compute statistics
-    mean_latency = sum(latencies) / len(latencies)
-    median_latency = sorted(latencies)[len(latencies) // 2]
-    p99_latency = sorted(latencies)[int(len(latencies) * 0.99)]
-    p999_latency = sorted(latencies)[int(len(latencies) * 0.999)]
-
-    print(f'Mean Latency: {mean_latency:.2f} nanoseconds')
-    print(f'Median Latency: {median_latency:.2f} nanoseconds')
-    print(f'99th Percentile Latency: {p99_latency:.2f} nanoseconds')
-    print(f'99.9th Percentile Latency: {p999_latency:.2f} nanoseconds')
+def get_stats(latencies):
+    print(f'Mean Latency: {np.mean(latencies):.2f} nanoseconds')
+    print(f'Median Latency: {np.median(latencies):.2f} nanoseconds')
+    print(f'Std Dev: {np.std(latencies):.2f} nanoseconds')
+    print(f'Min Latency: {np.min(latencies):.2f} nanoseconds')
+    print(f'Max Latency: {np.max(latencies):.2f} nanoseconds')
+    print(f'99th Percentile Latency: {np.percentile(latencies, 99):.2f} nanoseconds')
+    print(f'99.9th Percentile Latency: {np.percentile(latencies, 99.9):.2f} nanoseconds')

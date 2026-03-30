@@ -1,2 +1,4 @@
 build/
 *.NASDAQ_ITCH50
+latencies.txt
+__pycache__/
