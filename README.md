@@ -1,16 +1,16 @@
 # Matching Engine — Built for Speed
 
 ## Status
-* Just finished writing the intial matching engine with synthetic data testing 
-* Currently operating at ~2 million orders per second
-* Using pretty optimal data structures and algorithims
-* Need to enhance the infra and optimize at the hardware level
+  - Median: 1.2 us per order                                                                                                                                                       
+  - Mean: 5.7 us                                                                                                                                                                   
+  - p99: 33 us                                                                                                                                                                     
+  - p999: 474 us                                                                                                                                                                   
+  - Throughput: ~56,000 orders/sec (full file run) 
 
 ## To-dos:
-- [ ] Track and store timing metrics with production tracking
-- [ ] Plot results using python
-- [ ] Make it faster (custom memory management, cache allignment, core pinning, and more)
-- [ ] Add support for more order types 
+- [ ] Make it faster (custom memory management, cache allignment, core pinning, branchless programming, and more)
 - [ ] Add fast logging
 - [ ] Add resilence with a redundent engine
+- [ ] Add support for more order types 
 - [ ] Add a risk gateway to remove outliers
+- [ ] Live data feed
