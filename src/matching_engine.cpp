@@ -64,7 +64,7 @@ void MatchingEngine::run() {
 
     switch (messageType) {
       case 'A': {
-        order = parser.readAddOrder(file);
+        order = parser.readAddOrder(data);
         ticker = getTickerAsInt(order);
         auto start = std::chrono::high_resolution_clock::now();
         executedOrders = orderBooks[ticker].handleOrder(order);
@@ -78,7 +78,7 @@ void MatchingEngine::run() {
         break;
       }
       case 'D': {
-        deleteOrder = parser.readDeleteOrder(file);
+        deleteOrder = parser.readDeleteOrder(data);
         orderReferenceNumber =
             (static_cast<uint64_t>(deleteOrder.orderReferenceNumberHigh)
              << 32) |

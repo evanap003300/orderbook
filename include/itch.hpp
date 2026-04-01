@@ -34,9 +34,9 @@ struct DeleteOrder {
 class ItchParser {
  public:
   std::vector<Order> readItch(std::string fileName);
-  Order readAddOrder(std::ifstream& file);
+  Order readAddOrder(const char*& data);
   void generateItch(uint32_t numOrders);
-  DeleteOrder readDeleteOrder(std::ifstream& file);
+  DeleteOrder readDeleteOrder(const char*& data);
 
  private:
   void generateSyntheticOrder(std::ofstream& file, bool buyOrder,

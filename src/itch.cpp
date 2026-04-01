@@ -1,27 +1,30 @@
 #include "itch.hpp"
 
-DeleteOrder ItchParser::readDeleteOrder(std::ifstream& file) {
+DeleteOrder ItchParser::readDeleteOrder(const char*& data) {
   uint16_t stockLocate;
-  file.read(reinterpret_cast<char*>(&stockLocate), sizeof(stockLocate));
+  memcpy(&stockLocate, data, sizeof(stockLocate));
   stockLocate = ntohs(stockLocate);
+  data += sizeof(stockLocate);
 
   uint16_t trackingNumber;
-  file.read(reinterpret_cast<char*>(&trackingNumber), sizeof(trackingNumber));
+  memcpy(&trackingNumber, data, sizeof(trackingNumber));
   trackingNumber = ntohs(trackingNumber);
+  data += sizeof(trackingNumber);
 
   uint16_t timestampHigh;
   uint32_t timestampLow;
-  file.read(reinterpret_cast<char*>(&timestampHigh), sizeof(timestampHigh));
-  file.read(reinterpret_cast<char*>(&timestampLow), sizeof(timestampLow));
+  memcpy(&timestampHigh, data, sizeof(timestampHigh));
+  memcpy(&timestampLow, data + sizeof(timestampHigh), sizeof(timestampLow));
   timestampHigh = ntohs(timestampHigh);
   timestampLow = ntohl(timestampLow);
+  data += sizeof(timestampHigh) + sizeof(timestampLow);
 
   uint32_t orderReferenceNumberHigh;
   uint32_t orderReferenceNumberLow;
-  file.read(reinterpret_cast<char*>(&orderReferenceNumberHigh),
-            sizeof(orderReferenceNumberHigh));
-  file.read(reinterpret_cast<char*>(&orderReferenceNumberLow),
-            sizeof(orderReferenceNumberLow));
+  memcpy(&orderReferenceNumberHigh, data, sizeof(orderReferenceNumberHigh));
+  memcpy(&orderReferenceNumberLow, data + sizeof(orderReferenceNumberHigh),
+         sizeof(orderReferenceNumberLow));
+  data += sizeof(orderReferenceNumberHigh) + sizeof(orderReferenceNumberLow);
   orderReferenceNumberHigh = ntohl(orderReferenceNumberHigh);
   orderReferenceNumberLow = ntohl(orderReferenceNumberLow);
 
@@ -40,44 +43,50 @@ DeleteOrder ItchParser::readDeleteOrder(std::ifstream& file) {
 /*
  * Reads an Add Order message from itch format and returns an Order struct.
  */
-Order ItchParser::readAddOrder(std::ifstream& file) {
+Order ItchParser::readAddOrder(const char*& data) {
   uint16_t stockLocate;
-  file.read(reinterpret_cast<char*>(&stockLocate), sizeof(stockLocate));
+  memcpy(&stockLocate, data, sizeof(stockLocate));
   stockLocate = ntohs(stockLocate);
+  data += sizeof(stockLocate);
 
   uint16_t trackingNumber;
-  file.read(reinterpret_cast<char*>(&trackingNumber), sizeof(trackingNumber));
+  memcpy(&trackingNumber, data, sizeof(trackingNumber));
   trackingNumber = ntohs(trackingNumber);
+  data += sizeof(trackingNumber);
 
   uint16_t timestampHigh;
   uint32_t timestampLow;
-  file.read(reinterpret_cast<char*>(&timestampHigh), sizeof(timestampHigh));
-  file.read(reinterpret_cast<char*>(&timestampLow), sizeof(timestampLow));
+  memcpy(&timestampHigh, data, sizeof(timestampHigh));
+  memcpy(&timestampLow, data + sizeof(timestampHigh), sizeof(timestampLow));
   timestampHigh = ntohs(timestampHigh);
   timestampLow = ntohl(timestampLow);
+  data += sizeof(timestampHigh) + sizeof(timestampLow);
 
   uint32_t orderReferenceNumberHigh;
   uint32_t orderReferenceNumberLow;
-  file.read(reinterpret_cast<char*>(&orderReferenceNumberHigh),
-            sizeof(orderReferenceNumberHigh));
-  file.read(reinterpret_cast<char*>(&orderReferenceNumberLow),
-            sizeof(orderReferenceNumberLow));
+  memcpy(&orderReferenceNumberHigh, data, sizeof(orderReferenceNumberHigh));
+  memcpy(&orderReferenceNumberLow, data + sizeof(orderReferenceNumberHigh),
+         sizeof(orderReferenceNumberLow));
+  data += sizeof(orderReferenceNumberHigh) + sizeof(orderReferenceNumberLow);
   orderReferenceNumberHigh = ntohl(orderReferenceNumberHigh);
   orderReferenceNumberLow = ntohl(orderReferenceNumberLow);
 
-  char buySellIndicator;
-  file.read(&buySellIndicator, sizeof(buySellIndicator));
+  char buySellIndicator = *data;
+  data++;
 
   uint32_t shares;
-  file.read(reinterpret_cast<char*>(&shares), sizeof(shares));
+  memcpy(&shares, data, sizeof(shares));
   shares = ntohl(shares);
+  data += sizeof(shares);
 
   char stock[8];
-  file.read(stock, sizeof(stock));
+  memcpy(stock, data, sizeof(stock));
+  data += sizeof(stock);
 
   uint32_t price;
-  file.read(reinterpret_cast<char*>(&price), sizeof(price));
+  memcpy(&price, data, sizeof(price));
   price = ntohl(price);
+  data += sizeof(price);
 
   Order order;
   order.messageType = 'A';
@@ -95,7 +104,7 @@ Order ItchParser::readAddOrder(std::ifstream& file) {
 }
 
 std::vector<Order> ItchParser::readItch(std::string fileName) {
-  std::ifstream file(fileName, std::ios::binary);
+  /*std::ifstream file(fileName, std::ios::binary);
 
   if (!file.is_open()) {
     throw std::runtime_error("Could not open file");
@@ -123,7 +132,8 @@ std::vector<Order> ItchParser::readItch(std::string fileName) {
   }
 
   file.close();
-  return orders;
+  return orders; */
+  return {};
 }
 
 void ItchParser::generateSyntheticOrder(std::ofstream& file, bool buyOrder,
