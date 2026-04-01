@@ -23,14 +23,24 @@ void MatchingEngine::logExecutedOrders(
 
 void MatchingEngine::run() {
   std::string fileName = "itch_data.NASDAQ_ITCH50";
-  ItchParser parser;
 
-  std::ifstream file(fileName, std::ios::binary);
+  int fd = open(fileName.c_str(), O_RDONLY);
+  struct stat sb;
+  fstat(fd, &sb);
+  auto fileSize = sb.st_size;
 
-  if (!file.is_open()) {
-    throw std::runtime_error("Could not open file");
+  void* file =
+      mmap(nullptr, fileSize, PROT_READ, MAP_FILE | MAP_PRIVATE, fd, 0);
+
+  if (file == MAP_FAILED) {
+    close(fd);
+    return;
   }
 
+  const char* data = static_cast<const char*>(file);
+  const char* end = data + fileSize;
+
+  ItchParser parser;
   uint16_t messageLength;
   char messageType;
   uint64_t ticker;
@@ -38,22 +48,19 @@ void MatchingEngine::run() {
   Order order;
   DeleteOrder deleteOrder;
   uint64_t orderReferenceNumber;
-
-  file.seekg(0, std::ios::end);
-  auto fileSize = file.tellg();
-  file.seekg(0, std::ios::beg);
-
   uint64_t messageCount = 0;
 
-  while (file.read(reinterpret_cast<char*>(&messageLength),
-                   sizeof(messageLength))) {
-    messageLength = ntohs(messageLength);
-    file.read(&messageType, sizeof(messageType));
-
+  while (data < end) {
+    messageLength = ntohs(*reinterpret_cast<const uint16_t*>(data));
+    data += 2;
     messageCount++;
     if (messageCount % 1000000 == 0) {
-      printf("Progress: %.1f%%\n", (double)file.tellg() / fileSize * 100);
+      printf("Progress: %.1f%%\n",
+             (double)(data - static_cast<const char*>(file)) / fileSize * 100);
     }
+
+    messageType = *data;
+    data++;
 
     switch (messageType) {
       case 'A': {
@@ -61,12 +68,12 @@ void MatchingEngine::run() {
         ticker = getTickerAsInt(order);
         auto start = std::chrono::high_resolution_clock::now();
         executedOrders = orderBooks[ticker].handleOrder(order);
+        auto end_time = std::chrono::high_resolution_clock::now();
         orderReferenceNumber =
             (static_cast<uint64_t>(order.orderReferenceNumberHigh) << 32) |
             order.orderReferenceNumberLow;
         orderMap[orderReferenceNumber] = ticker;
-        auto end = std::chrono::high_resolution_clock::now();
-        auto latency = end - start;
+        auto latency = end_time - start;
         latencies.push_back(latency.count());
         break;
       }
@@ -84,10 +91,11 @@ void MatchingEngine::run() {
         break;
       }
       default:
-        file.seekg(messageLength - 1, std::ios::cur);
+        data += messageLength - 1;
         break;
     }
   }
 
-  file.close();
+  munmap(file, fileSize);
+  close(fd);
 }
