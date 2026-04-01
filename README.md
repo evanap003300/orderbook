@@ -8,6 +8,7 @@
   - Throughput: ~56,000 orders/sec (full file run) 
 
 ## To-dos:
+- [ ] Clean up code debt and rewrite tests (itch)
 - [ ] Make it faster (custom memory management, cache allignment, core pinning, branchless programming, and more)
 - [ ] Add fast logging
 - [ ] Add resilence with a redundent engine
