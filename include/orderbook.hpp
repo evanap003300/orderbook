@@ -4,6 +4,7 @@
 #include <chrono>
 #include <deque>
 #include <map>
+#include <stdexcept>
 #include <unordered_map>
 #include <vector>
 
