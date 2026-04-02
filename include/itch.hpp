@@ -1,7 +1,11 @@
 #pragma once
 #include <arpa/inet.h>
+#include <fcntl.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <sys/mman.h>
+#include <sys/stat.h>
+#include <unistd.h>
 
 #include <fstream>
 #include <string>
@@ -35,10 +39,5 @@ class ItchParser {
  public:
   std::vector<Order> readItch(std::string fileName);
   Order readAddOrder(const char*& data);
-  void generateItch(uint32_t numOrders);
   DeleteOrder readDeleteOrder(const char*& data);
-
- private:
-  void generateSyntheticOrder(std::ofstream& file, bool buyOrder,
-                              uint32_t orderReferenceNumber);
 };
