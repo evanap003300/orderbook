@@ -1,15 +1,16 @@
 # Matching Engine — Built for Speed
 
 ## Status
-  - Median: 1.2 us per order                                                                                                                                                       
-  - Mean: 5.7 us                                                                                                                                                                   
-  - p99: 33 us                                                                                                                                                                     
-  - p999: 474 us                                                                                                                                                                   
-  - Throughput: ~56,000 orders/sec (full file run) 
+- Mean Latency: 2375.04 nanoseconds
+- Median Latency: 875.00 nanoseconds
+- Std Dev: 49303.58 nanoseconds
+- 99th Percentile Latency: 16416.00 nanoseconds
+- 99.9th Percentile Latency: 132083.00 nanoseconds
 
 ## To-dos:
-- [ ] Clean up code debt and rewrite tests (itch)
+- [ ] Write new tests before updaing memory management
 - [ ] Make it faster (custom memory management, cache allignment, core pinning, branchless programming, and more)
+- [ ] Do something with executed results
 - [ ] Add fast logging
 - [ ] Add resilence with a redundent engine
 - [ ] Add support for more order types 
