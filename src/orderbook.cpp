@@ -16,15 +16,15 @@ std::vector<ItchOrderExecuted> OrderBook::handleBuyOrder(Order& buyOrder) {
       uint32_t executedShares = std::min(buyOrder.shares, sellOrder.shares);
       ItchOrderExecuted executedOrder;
       executedOrder.message_type = 'E';
-      executedOrder.stock_locate = buyOrder.stockLocate;
-      executedOrder.tracking_number = std::rand();
-      executedOrder.timestamp_high = buyOrder.timestampHigh;
-      executedOrder.timestamp_low = buyOrder.timestampLow;
+      executedOrder.stock_locate = -1;
+      executedOrder.tracking_number = -1;
+      executedOrder.timestamp_high = -1;
+      executedOrder.timestamp_low = -1;
       executedOrder.order_reference_number =
           (static_cast<uint64_t>(sellOrder.orderReferenceNumberHigh) << 32) |
           sellOrder.orderReferenceNumberLow;
       executedOrder.executed_shares = executedShares;
-      executedOrder.match_number = std::rand();
+      executedOrder.match_number = -1;
       executedOrders.push_back(executedOrder);
 
       buyOrder.shares -= executedShares;
@@ -72,15 +72,15 @@ std::vector<ItchOrderExecuted> OrderBook::handleSellOrder(Order& sellOrder) {
       uint32_t executedShares = std::min(sellOrder.shares, buyOrder.shares);
       ItchOrderExecuted executedOrder;
       executedOrder.message_type = 'E';
-      executedOrder.stock_locate = sellOrder.stockLocate;
-      executedOrder.tracking_number = std::rand();
-      executedOrder.timestamp_high = sellOrder.timestampHigh;
-      executedOrder.timestamp_low = sellOrder.timestampLow;
+      executedOrder.stock_locate = -1;
+      executedOrder.tracking_number = -1;
+      executedOrder.timestamp_high = -1;
+      executedOrder.timestamp_low = -1;
       executedOrder.order_reference_number =
           (static_cast<uint64_t>(buyOrder.orderReferenceNumberHigh) << 32) |
           buyOrder.orderReferenceNumberLow;
       executedOrder.executed_shares = executedShares;
-      executedOrder.match_number = std::rand();
+      executedOrder.match_number = -1;
       executedOrders.push_back(executedOrder);
 
       buyOrder.shares -= executedShares;

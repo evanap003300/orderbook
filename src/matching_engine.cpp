@@ -8,12 +8,6 @@ inline uint64_t MatchingEngine::rdtsc() {
   return 0;
 }
 
-uint64_t MatchingEngine::getTickerAsInt(const Order& order) {
-  uint64_t tickerInt = 0;
-  memcpy(&tickerInt, order.stock, 8);
-  return tickerInt;
-}
-
 void MatchingEngine::logExecutedOrders(
     const std::vector<ItchOrderExecuted>& executedOrders) {
   for (const auto& order : executedOrders) {
@@ -64,8 +58,8 @@ void MatchingEngine::run() {
 
     switch (messageType) {
       case 'A': {
+        memcpy(&ticker, data + 23, 8);
         order = parser.readAddOrder(data);
-        ticker = getTickerAsInt(order);
         auto start = std::chrono::high_resolution_clock::now();
         executedOrders = orderBooks[ticker].handleOrder(order);
         auto end_time = std::chrono::high_resolution_clock::now();

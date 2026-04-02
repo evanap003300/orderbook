@@ -1,0 +1,3 @@
+1: Base result
+2: Read from memory using mmap instead of doing file IO 
+3: Struct allignment
