@@ -1,0 +1,5 @@
+Mean Latency: 1424.52 nanoseconds
+Median Latency: 709.00 nanoseconds
+Std Dev: 7499.35 nanoseconds
+99th Percentile Latency: 9500.00 nanoseconds
+99.9th Percentile Latency: 40625.00 nanoseconds
