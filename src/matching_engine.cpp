@@ -37,7 +37,7 @@ void MatchingEngine::run() {
   ItchParser parser;
   uint16_t messageLength;
   char messageType;
-  uint64_t ticker;
+  uint16_t stockLocate;
   std::vector<ItchOrderExecuted> executedOrders;
   Order order;
   DeleteOrder deleteOrder;
@@ -58,15 +58,15 @@ void MatchingEngine::run() {
 
     switch (messageType) {
       case 'A': {
-        memcpy(&ticker, data + 23, 8);
+        stockLocate = ntohs(*reinterpret_cast<const uint16_t*>(data));
         order = parser.readAddOrder(data);
         auto start = std::chrono::high_resolution_clock::now();
-        executedOrders = orderBooks[ticker].handleOrder(order);
+        executedOrders = orderBooks[stockLocate].handleOrder(order);
         auto end_time = std::chrono::high_resolution_clock::now();
         orderReferenceNumber =
             (static_cast<uint64_t>(order.orderReferenceNumberHigh) << 32) |
             order.orderReferenceNumberLow;
-        orderMap[orderReferenceNumber] = ticker;
+        orderMap[orderReferenceNumber] = stockLocate;
         auto latency = end_time - start;
         latencies.push_back(latency.count());
         break;
@@ -80,8 +80,8 @@ void MatchingEngine::run() {
         if (!orderMap.count(orderReferenceNumber)) {
           break;
         }
-        ticker = orderMap[orderReferenceNumber];
-        orderBooks[ticker].handleDeleteOrder(deleteOrder);
+        stockLocate = orderMap[orderReferenceNumber];
+        orderBooks[stockLocate].handleDeleteOrder(deleteOrder);
         break;
       }
       default:

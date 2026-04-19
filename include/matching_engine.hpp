@@ -18,8 +18,8 @@ class MatchingEngine {
   void run();
 
  private:
-  std::unordered_map<uint64_t, uint64_t> orderMap;
-  std::unordered_map<uint64_t, OrderBook> orderBooks;
+  std::unordered_map<uint64_t, uint16_t> orderMap;
+  std::vector<OrderBook> orderBooks{65536};
   void logExecutedOrders(const std::vector<ItchOrderExecuted>& executedOrders);
   inline uint64_t rdtsc();
 };
