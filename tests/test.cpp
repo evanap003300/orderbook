@@ -1,7 +1,128 @@
 #include <gtest/gtest.h>
 
+#include <cstdint>
+#include <limits>
+
+#include "flat_hash_map.hpp"
 #include "itch.hpp"
 #include "orderbook.hpp"
+
+// FlatHashMap tests
+
+constexpr uint64_t EMPTY_KEY = std::numeric_limits<uint64_t>::max();
+
+TEST(FlatHashMapTest, InsertAndFind) {
+  FlatHashMap<uint64_t, uint16_t, EMPTY_KEY> map(16);
+  map.insert(42, 100);
+  uint16_t* val = map.find(42);
+  ASSERT_NE(val, nullptr);
+  EXPECT_EQ(*val, 100);
+}
+
+TEST(FlatHashMapTest, FindMissingReturnsNull) {
+  FlatHashMap<uint64_t, uint16_t, EMPTY_KEY> map(16);
+  EXPECT_EQ(map.find(42), nullptr);
+}
+
+TEST(FlatHashMapTest, InsertOverwritesExistingKey) {
+  FlatHashMap<uint64_t, uint16_t, EMPTY_KEY> map(16);
+  map.insert(42, 100);
+  map.insert(42, 200);
+  uint16_t* val = map.find(42);
+  ASSERT_NE(val, nullptr);
+  EXPECT_EQ(*val, 200);
+}
+
+TEST(FlatHashMapTest, EraseRemovesKey) {
+  FlatHashMap<uint64_t, uint16_t, EMPTY_KEY> map(16);
+  map.insert(42, 100);
+  map.erase(42);
+  EXPECT_EQ(map.find(42), nullptr);
+}
+
+TEST(FlatHashMapTest, EraseMissingKeyIsNoOp) {
+  FlatHashMap<uint64_t, uint16_t, EMPTY_KEY> map(16);
+  EXPECT_NO_THROW(map.erase(42));
+}
+
+TEST(FlatHashMapTest, MultipleInsertsAndFinds) {
+  FlatHashMap<uint64_t, uint16_t, EMPTY_KEY> map(64);
+  for (uint64_t i = 0; i < 20; i++) {
+    map.insert(i, static_cast<uint16_t>(i * 10));
+  }
+  for (uint64_t i = 0; i < 20; i++) {
+    uint16_t* val = map.find(i);
+    ASSERT_NE(val, nullptr);
+    EXPECT_EQ(*val, static_cast<uint16_t>(i * 10));
+  }
+}
+
+TEST(FlatHashMapTest, EraseWithCollisionsStillFinds) {
+  FlatHashMap<uint64_t, uint16_t, EMPTY_KEY> map(8);
+  map.insert(1, 10);
+  map.insert(2, 20);
+  map.insert(3, 30);
+  map.insert(4, 40);
+
+  map.erase(2);
+
+  EXPECT_EQ(map.find(2), nullptr);
+
+  uint16_t* v1 = map.find(1);
+  uint16_t* v3 = map.find(3);
+  uint16_t* v4 = map.find(4);
+  ASSERT_NE(v1, nullptr);
+  ASSERT_NE(v3, nullptr);
+  ASSERT_NE(v4, nullptr);
+  EXPECT_EQ(*v1, 10);
+  EXPECT_EQ(*v3, 30);
+  EXPECT_EQ(*v4, 40);
+}
+
+TEST(FlatHashMapTest, EraseAllEntries) {
+  FlatHashMap<uint64_t, uint16_t, EMPTY_KEY> map(64);
+  for (uint64_t i = 0; i < 30; i++) {
+    map.insert(i, static_cast<uint16_t>(i));
+  }
+  for (uint64_t i = 0; i < 30; i++) {
+    map.erase(i);
+  }
+  for (uint64_t i = 0; i < 30; i++) {
+    EXPECT_EQ(map.find(i), nullptr);
+  }
+}
+
+TEST(FlatHashMapTest, ReinsertAfterErase) {
+  FlatHashMap<uint64_t, uint16_t, EMPTY_KEY> map(16);
+  map.insert(42, 100);
+  map.erase(42);
+  map.insert(42, 999);
+  uint16_t* val = map.find(42);
+  ASSERT_NE(val, nullptr);
+  EXPECT_EQ(*val, 999);
+}
+
+TEST(FlatHashMapTest, LargeNumberOfInsertsAndErases) {
+  FlatHashMap<uint64_t, uint16_t, EMPTY_KEY> map(1024);
+  for (uint64_t i = 0; i < 500; i++) {
+    map.insert(i, static_cast<uint16_t>(i % 65536));
+  }
+  // Erase half
+  for (uint64_t i = 0; i < 250; i++) {
+    map.erase(i);
+  }
+  // Verify remaining
+  for (uint64_t i = 0; i < 250; i++) {
+    EXPECT_EQ(map.find(i), nullptr);
+  }
+  for (uint64_t i = 250; i < 500; i++) {
+    uint16_t* val = map.find(i);
+    ASSERT_NE(val, nullptr);
+    EXPECT_EQ(*val, static_cast<uint16_t>(i % 65536));
+  }
+}
+
+// OrderBook tests
 
 // Basic functionality
 
