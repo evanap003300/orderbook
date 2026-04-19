@@ -66,7 +66,7 @@ void MatchingEngine::run() {
         orderReferenceNumber =
             (static_cast<uint64_t>(order.orderReferenceNumberHigh) << 32) |
             order.orderReferenceNumberLow;
-        orderMap[orderReferenceNumber] = stockLocate;
+        orderMap.insert(orderReferenceNumber, stockLocate);
         auto latency = end_time - start;
         latencies.push_back(latency.count());
         break;
@@ -77,11 +77,12 @@ void MatchingEngine::run() {
             (static_cast<uint64_t>(deleteOrder.orderReferenceNumberHigh)
              << 32) |
             deleteOrder.orderReferenceNumberLow;
-        if (!orderMap.count(orderReferenceNumber)) {
+        uint16_t* found = orderMap.find(orderReferenceNumber);
+        if (!found) {
           break;
         }
-        stockLocate = orderMap[orderReferenceNumber];
-        orderBooks[stockLocate].handleDeleteOrder(deleteOrder);
+        orderBooks[*found].handleDeleteOrder(deleteOrder);
+        orderMap.erase(orderReferenceNumber);
         break;
       }
       default:
