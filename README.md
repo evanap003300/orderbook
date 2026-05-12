@@ -8,7 +8,6 @@
 - 99.9th Percentile Latency: 132083.00 nanoseconds
 
 ## To-dos:
-- [ ] Write new tests before updaing memory management
 - [ ] Make it faster (custom memory management, cache allignment, core pinning, branchless programming, and more)
 - [ ] Do something with executed results
 - [ ] Add fast logging

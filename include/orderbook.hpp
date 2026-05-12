@@ -3,11 +3,12 @@
 
 #include <chrono>
 #include <deque>
+#include <limits>
 #include <map>
 #include <stdexcept>
-#include <unordered_map>
 #include <vector>
 
+#include "flat_hash_map.hpp"
 #include "itch.hpp"
 
 struct ItchOrderExecuted {
@@ -23,11 +24,12 @@ struct ItchOrderExecuted {
 
 class OrderBook {
  public:
+  OrderBook() : orderMap(512) {}
   std::vector<ItchOrderExecuted> handleOrder(Order& order);
   void handleDeleteOrder(DeleteOrder& order);
 
  private:
-  std::unordered_map<uint64_t, Order> orderMap;
+  FlatHashMap<uint64_t, Order, std::numeric_limits<uint64_t>::max()> orderMap;
   std::map<uint32_t, std::deque<Order>, std::greater<uint32_t>> bids;
   std::map<uint32_t, std::deque<Order>> asks;
   std::vector<ItchOrderExecuted> handleBuyOrder(Order& order);

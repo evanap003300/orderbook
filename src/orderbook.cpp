@@ -50,7 +50,7 @@ std::vector<ItchOrderExecuted> OrderBook::handleBuyOrder(Order& buyOrder) {
     uint64_t orderRefNum =
         (static_cast<uint64_t>(buyOrder.orderReferenceNumberHigh) << 32) |
         buyOrder.orderReferenceNumberLow;
-    orderMap[orderRefNum] = buyOrder;
+    orderMap.insert(orderRefNum, buyOrder);
   }
 
   return executedOrders;
@@ -106,7 +106,7 @@ std::vector<ItchOrderExecuted> OrderBook::handleSellOrder(Order& sellOrder) {
     uint64_t orderRefNum =
         (static_cast<uint64_t>(sellOrder.orderReferenceNumberHigh) << 32) |
         sellOrder.orderReferenceNumberLow;
-    orderMap[orderRefNum] = sellOrder;
+    orderMap.insert(orderRefNum, sellOrder);
   }
 
   return executedOrders;
@@ -116,11 +116,14 @@ void OrderBook::deleteOrder(DeleteOrder& order) {
   uint64_t orderRefNum =
       (static_cast<uint64_t>(order.orderReferenceNumberHigh) << 32) |
       order.orderReferenceNumberLow;
-  if (orderMap.find(orderRefNum) == orderMap.end()) {
+
+  Order* deletePtr = orderMap.find(orderRefNum);
+
+  if (deletePtr == nullptr) {
     return;
   }
 
-  Order deleteOrder = orderMap[orderRefNum];
+  Order deleteOrder = *deletePtr;
 
   auto& ordersAtPrice = deleteOrder.buySellIndicator == 'B'
                             ? bids[deleteOrder.price]
