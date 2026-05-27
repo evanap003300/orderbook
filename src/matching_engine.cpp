@@ -1,5 +1,17 @@
 #include "matching_engine.hpp"
 
+#include <chrono>
+#include <cstdio>
+#include <string>
+
+MatchingEngine::MatchingEngine() : pool(16777216), orderMap(33554432) {
+  latencies.reserve(10000000);
+  orderBooks.reserve(65536);
+  for (uint32_t i = 0; i < 65536; i++) {
+    orderBooks.emplace_back(&pool);
+  }
+}
+
 // Use cpu timestamp counter for latency measurement
 inline uint64_t MatchingEngine::rdtsc() {
   /*unsigned int lo, hi;
@@ -39,6 +51,7 @@ void MatchingEngine::run() {
   char messageType;
   uint16_t stockLocate;
   std::vector<ItchOrderExecuted> executedOrders;
+  std::vector<uint64_t> removedRefs;
   Order order;
   DeleteOrder deleteOrder;
   uint64_t orderReferenceNumber;
@@ -60,13 +73,25 @@ void MatchingEngine::run() {
       case 'A': {
         stockLocate = ntohs(*reinterpret_cast<const uint16_t*>(data));
         order = parser.readAddOrder(data);
+        removedRefs.clear();
+        uint32_t restingIdx;
         auto start = std::chrono::high_resolution_clock::now();
-        executedOrders = orderBooks[stockLocate].handleOrder(order);
+        executedOrders =
+            orderBooks[stockLocate].handleOrder(order, restingIdx, removedRefs);
         auto end_time = std::chrono::high_resolution_clock::now();
-        orderReferenceNumber =
-            (static_cast<uint64_t>(order.orderReferenceNumberHigh) << 32) |
-            order.orderReferenceNumberLow;
-        orderMap.insert(orderReferenceNumber, stockLocate);
+
+        // Resting orders consumed during matching are gone; drop their entries.
+        for (uint64_t ref : removedRefs) {
+          orderMap.erase(ref);
+        }
+        // Record this order's slot if any of it rested.
+        if (restingIdx != INVALID_INDEX) {
+          orderReferenceNumber =
+              (static_cast<uint64_t>(order.orderReferenceNumberHigh) << 32) |
+              order.orderReferenceNumberLow;
+          orderMap.insert(orderReferenceNumber, {stockLocate, restingIdx});
+        }
+
         auto latency = end_time - start;
         latencies.push_back(latency.count());
         break;
@@ -77,11 +102,11 @@ void MatchingEngine::run() {
             (static_cast<uint64_t>(deleteOrder.orderReferenceNumberHigh)
              << 32) |
             deleteOrder.orderReferenceNumberLow;
-        uint16_t* found = orderMap.find(orderReferenceNumber);
+        OrderLocation* found = orderMap.find(orderReferenceNumber);
         if (!found) {
           break;
         }
-        orderBooks[*found].handleDeleteOrder(deleteOrder);
+        orderBooks[found->stockLocate].removeByIndex(found->poolIdx);
         orderMap.erase(orderReferenceNumber);
         break;
       }

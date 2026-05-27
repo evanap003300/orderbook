@@ -9,18 +9,26 @@
 
 #include "flat_hash_map.hpp"
 #include "itch.hpp"
+#include "order_pool.hpp"
 #include "orderbook.hpp"
+
+// Where a resting order lives: which book owns it and its slot in the pool.
+struct OrderLocation {
+  uint16_t stockLocate;
+  uint32_t poolIdx;
+};
 
 class MatchingEngine {
  public:
   std::vector<uint64_t> latencies;
-  MatchingEngine() : orderMap(33554432) { latencies.reserve(10000000); }
+  MatchingEngine();
   void run();
 
  private:
-  FlatHashMap<uint64_t, uint16_t, std::numeric_limits<uint64_t>::max()>
+  OrderPool pool;
+  FlatHashMap<uint64_t, OrderLocation, std::numeric_limits<uint64_t>::max()>
       orderMap;
-  std::vector<OrderBook> orderBooks{65536};
+  std::vector<OrderBook> orderBooks;
   void logExecutedOrders(const std::vector<ItchOrderExecuted>& executedOrders);
   inline uint64_t rdtsc();
 };

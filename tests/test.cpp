@@ -2,9 +2,11 @@
 
 #include <cstdint>
 #include <limits>
+#include <vector>
 
 #include "flat_hash_map.hpp"
 #include "itch.hpp"
+#include "order_pool.hpp"
 #include "orderbook.hpp"
 
 // FlatHashMap tests
@@ -123,71 +125,93 @@ TEST(FlatHashMapTest, LargeNumberOfInsertsAndErases) {
 }
 
 // OrderBook tests
+//
+// The engine resolves a delete's reference number to a pool index before
+// calling the book, so these tests mirror that: an OrderPool is owned here,
+// add() captures the pool index of any resting order, and del() removes by
+// index. removed[] collects resting orders fully filled during matching.
+struct TestBook {
+  OrderPool pool;
+  OrderBook ob{&pool};
+  uint32_t lastRestingIdx = INVALID_INDEX;
+  std::vector<uint64_t> removed;
+
+  std::vector<ItchOrderExecuted> add(Order order) {
+    removed.clear();
+    return ob.handleOrder(order, lastRestingIdx, removed);
+  }
+
+  void del(uint32_t idx) { ob.removeByIndex(idx); }
+};
 
 // Basic functionality
 
 TEST(OrderBookTest, AddBuyOrderToEmptyBook) {
-  OrderBook ob;
+  TestBook tb;
   Order order{0, 1, 100, 1000, 'B'};
-  auto executed = ob.handleOrder(order);
+  auto executed = tb.add(order);
   EXPECT_TRUE(executed.empty());
+  EXPECT_NE(tb.lastRestingIdx, INVALID_INDEX);
 }
 
 TEST(OrderBookTest, AddSellOrderToEmptyBook) {
-  OrderBook ob;
+  TestBook tb;
   Order order{0, 1, 100, 1000, 'S'};
-  auto executed = ob.handleOrder(order);
+  auto executed = tb.add(order);
   EXPECT_TRUE(executed.empty());
+  EXPECT_NE(tb.lastRestingIdx, INVALID_INDEX);
 }
 
 TEST(OrderBookTest, BuyAndSellMatchAtCrossingPrice) {
-  OrderBook ob;
+  TestBook tb;
   Order sell{0, 1, 100, 900, 'S'};
-  ob.handleOrder(sell);
+  tb.add(sell);
 
   Order buy{0, 2, 100, 1000, 'B'};
-  auto executed = ob.handleOrder(buy);
+  auto executed = tb.add(buy);
   EXPECT_EQ(executed.size(), 1);
   EXPECT_EQ(executed[0].executed_shares, 100);
+  // Both sides fully filled: nothing rests, resting sell is reported removed.
+  EXPECT_EQ(tb.lastRestingIdx, INVALID_INDEX);
+  ASSERT_EQ(tb.removed.size(), 1u);
+  EXPECT_EQ(tb.removed[0], 1u);
 }
 
 TEST(OrderBookTest, DeleteOrderRemovesFromBook) {
-  OrderBook ob;
+  TestBook tb;
   Order buy{0, 1, 100, 1000, 'B'};
-  ob.handleOrder(buy);
-
-  DeleteOrder del{0, 1};
-  ob.handleDeleteOrder(del);
+  tb.add(buy);
+  tb.del(tb.lastRestingIdx);
 
   Order sell{0, 2, 100, 900, 'S'};
-  auto executed = ob.handleOrder(sell);
+  auto executed = tb.add(sell);
   EXPECT_TRUE(executed.empty());
 }
 
 // Price priority
 
 TEST(OrderBookTest, HigherBidFilledFirst) {
-  OrderBook ob;
+  TestBook tb;
   Order lowBid{0, 1, 50, 900, 'B'};
   Order highBid{0, 2, 50, 1100, 'B'};
-  ob.handleOrder(lowBid);
-  ob.handleOrder(highBid);
+  tb.add(lowBid);
+  tb.add(highBid);
 
   Order sell{0, 3, 50, 800, 'S'};
-  auto executed = ob.handleOrder(sell);
+  auto executed = tb.add(sell);
   EXPECT_EQ(executed.size(), 1);
   EXPECT_EQ(executed[0].order_reference_number, 2);
 }
 
 TEST(OrderBookTest, LowerAskFilledFirst) {
-  OrderBook ob;
+  TestBook tb;
   Order highAsk{0, 1, 50, 1100, 'S'};
   Order lowAsk{0, 2, 50, 900, 'S'};
-  ob.handleOrder(highAsk);
-  ob.handleOrder(lowAsk);
+  tb.add(highAsk);
+  tb.add(lowAsk);
 
   Order buy{0, 3, 50, 1200, 'B'};
-  auto executed = ob.handleOrder(buy);
+  auto executed = tb.add(buy);
   EXPECT_EQ(executed.size(), 1);
   EXPECT_EQ(executed[0].order_reference_number, 2);
 }
@@ -195,27 +219,27 @@ TEST(OrderBookTest, LowerAskFilledFirst) {
 // Time priority
 
 TEST(OrderBookTest, EarlierBidFilledFirstAtSamePrice) {
-  OrderBook ob;
+  TestBook tb;
   Order first{0, 1, 50, 1000, 'B'};
   Order second{0, 2, 50, 1000, 'B'};
-  ob.handleOrder(first);
-  ob.handleOrder(second);
+  tb.add(first);
+  tb.add(second);
 
   Order sell{0, 3, 50, 900, 'S'};
-  auto executed = ob.handleOrder(sell);
+  auto executed = tb.add(sell);
   EXPECT_EQ(executed.size(), 1);
   EXPECT_EQ(executed[0].order_reference_number, 1);
 }
 
 TEST(OrderBookTest, EarlierAskFilledFirstAtSamePrice) {
-  OrderBook ob;
+  TestBook tb;
   Order first{0, 1, 50, 1000, 'S'};
   Order second{0, 2, 50, 1000, 'S'};
-  ob.handleOrder(first);
-  ob.handleOrder(second);
+  tb.add(first);
+  tb.add(second);
 
   Order buy{0, 3, 50, 1100, 'B'};
-  auto executed = ob.handleOrder(buy);
+  auto executed = tb.add(buy);
   EXPECT_EQ(executed.size(), 1);
   EXPECT_EQ(executed[0].order_reference_number, 1);
 }
@@ -223,27 +247,27 @@ TEST(OrderBookTest, EarlierAskFilledFirstAtSamePrice) {
 // Partial fills
 
 TEST(OrderBookTest, IncomingOrderPartiallyFillsRestingOrder) {
-  OrderBook ob;
+  TestBook tb;
   Order sell{0, 1, 200, 900, 'S'};
-  ob.handleOrder(sell);
+  tb.add(sell);
 
   Order buy{0, 2, 50, 1000, 'B'};
-  auto executed = ob.handleOrder(buy);
+  auto executed = tb.add(buy);
   EXPECT_EQ(executed.size(), 1);
   EXPECT_EQ(executed[0].executed_shares, 50);
 }
 
 TEST(OrderBookTest, IncomingOrderFillsAgainstMultipleRestingOrders) {
-  OrderBook ob;
+  TestBook tb;
   Order sell1{0, 1, 30, 900, 'S'};
   Order sell2{0, 2, 30, 950, 'S'};
   Order sell3{0, 3, 30, 1000, 'S'};
-  ob.handleOrder(sell1);
-  ob.handleOrder(sell2);
-  ob.handleOrder(sell3);
+  tb.add(sell1);
+  tb.add(sell2);
+  tb.add(sell3);
 
   Order buy{0, 4, 80, 1000, 'B'};
-  auto executed = ob.handleOrder(buy);
+  auto executed = tb.add(buy);
   EXPECT_EQ(executed.size(), 3);
   EXPECT_EQ(executed[0].executed_shares, 30);
   EXPECT_EQ(executed[1].executed_shares, 30);
@@ -251,64 +275,82 @@ TEST(OrderBookTest, IncomingOrderFillsAgainstMultipleRestingOrders) {
 }
 
 TEST(OrderBookTest, RestingOrderHasRemainingSharesAfterPartialFill) {
-  OrderBook ob;
+  TestBook tb;
   Order sell{0, 1, 200, 900, 'S'};
-  ob.handleOrder(sell);
+  tb.add(sell);
 
   Order buy1{0, 2, 50, 1000, 'B'};
-  ob.handleOrder(buy1);
+  tb.add(buy1);
 
   Order buy2{0, 3, 50, 1000, 'B'};
-  auto executed = ob.handleOrder(buy2);
+  auto executed = tb.add(buy2);
   EXPECT_EQ(executed.size(), 1);
   EXPECT_EQ(executed[0].executed_shares, 50);
 }
 
 // Edge cases
 
-TEST(OrderBookTest, DeleteAlreadyFilledOrderIsNoOp) {
-  OrderBook ob;
+TEST(OrderBookTest, FullyFilledRestingOrderIsReported) {
+  TestBook tb;
   Order sell{0, 1, 100, 900, 'S'};
-  ob.handleOrder(sell);
+  tb.add(sell);
 
   Order buy{0, 2, 100, 1000, 'B'};
-  ob.handleOrder(buy);
+  tb.add(buy);
 
-  DeleteOrder del{0, 1};
-  EXPECT_NO_THROW(ob.handleDeleteOrder(del));
+  // The resting sell (ref 1) was fully consumed, so the engine is told to drop
+  // it from the order map.
+  ASSERT_EQ(tb.removed.size(), 1u);
+  EXPECT_EQ(tb.removed[0], 1u);
 }
 
 TEST(OrderBookTest, DeleteThenNoMatch) {
-  OrderBook ob;
+  TestBook tb;
   Order buy1{0, 1, 100, 1000, 'B'};
   Order buy2{0, 2, 100, 900, 'B'};
-  ob.handleOrder(buy1);
-  ob.handleOrder(buy2);
+  tb.add(buy1);
+  uint32_t buy1Idx = tb.lastRestingIdx;
+  tb.add(buy2);
 
-  DeleteOrder del{0, 1};
-  ob.handleDeleteOrder(del);
+  tb.del(buy1Idx);
 
   Order sell{0, 3, 100, 950, 'S'};
-  auto executed = ob.handleOrder(sell);
+  auto executed = tb.add(sell);
   EXPECT_TRUE(executed.empty());
 }
 
 TEST(OrderBookTest, NoMatchBuyPriceTooLow) {
-  OrderBook ob;
+  TestBook tb;
   Order sell{0, 1, 100, 1000, 'S'};
-  ob.handleOrder(sell);
+  tb.add(sell);
 
   Order buy{0, 2, 100, 900, 'B'};
-  auto executed = ob.handleOrder(buy);
+  auto executed = tb.add(buy);
   EXPECT_TRUE(executed.empty());
 }
 
 TEST(OrderBookTest, NoMatchSellPriceTooHigh) {
-  OrderBook ob;
+  TestBook tb;
   Order buy{0, 1, 100, 1000, 'B'};
-  ob.handleOrder(buy);
+  tb.add(buy);
 
   Order sell{0, 2, 100, 1100, 'S'};
-  auto executed = ob.handleOrder(sell);
+  auto executed = tb.add(sell);
   EXPECT_TRUE(executed.empty());
+}
+
+// Pool reuse: a slot freed by a fill is handed back out to the next rester.
+
+TEST(OrderBookTest, PoolSlotReusedAfterFill) {
+  TestBook tb;
+  Order sell{0, 1, 100, 900, 'S'};
+  tb.add(sell);
+  uint32_t sellIdx = tb.lastRestingIdx;
+
+  Order buy{0, 2, 100, 1000, 'B'};
+  tb.add(buy);  // fully fills the sell, freeing sellIdx
+
+  Order sell2{0, 3, 100, 900, 'S'};
+  tb.add(sell2);  // should reclaim the freed slot
+  EXPECT_EQ(tb.lastRestingIdx, sellIdx);
 }
