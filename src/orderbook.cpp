@@ -3,10 +3,9 @@
 #include <algorithm>
 #include <stdexcept>
 
-std::vector<ItchOrderExecuted> OrderBook::handleBuyOrder(
-    Order& buyOrder, uint32_t& restingIdx, std::vector<uint64_t>& removedRefs) {
-  std::vector<ItchOrderExecuted> executedOrders;
-
+void OrderBook::handleBuyOrder(Order& buyOrder, uint32_t& restingIdx,
+                               std::vector<uint64_t>& removedRefs,
+                               std::vector<ItchOrderExecuted>& executedOrders) {
   // Match against the best ask while the buy crosses it. The ladder's
   // bestLevel() handles ladder-vs-overflow ordering in one call.
   while (buyOrder.shares > 0) {
@@ -62,14 +61,11 @@ std::vector<ItchOrderExecuted> OrderBook::handleBuyOrder(
   } else {
     restingIdx = INVALID_INDEX;
   }
-
-  return executedOrders;
 }
 
-std::vector<ItchOrderExecuted> OrderBook::handleSellOrder(
-    Order& sellOrder, uint32_t& restingIdx, std::vector<uint64_t>& removedRefs) {
-  std::vector<ItchOrderExecuted> executedOrders;
-
+void OrderBook::handleSellOrder(Order& sellOrder, uint32_t& restingIdx,
+                                std::vector<uint64_t>& removedRefs,
+                                std::vector<ItchOrderExecuted>& executedOrders) {
   while (sellOrder.shares > 0) {
     uint32_t bestPrice;
     Level* level = bids.bestLevel(bestPrice);
@@ -122,8 +118,6 @@ std::vector<ItchOrderExecuted> OrderBook::handleSellOrder(
   } else {
     restingIdx = INVALID_INDEX;
   }
-
-  return executedOrders;
 }
 
 void OrderBook::removeByIndex(uint32_t idx) {
@@ -137,12 +131,13 @@ void OrderBook::removeByIndex(uint32_t idx) {
   pool->free(idx);
 }
 
-std::vector<ItchOrderExecuted> OrderBook::handleOrder(
-    Order& order, uint32_t& restingIdx, std::vector<uint64_t>& removedRefs) {
+void OrderBook::handleOrder(Order& order, uint32_t& restingIdx,
+                            std::vector<uint64_t>& removedRefs,
+                            std::vector<ItchOrderExecuted>& executedOrders) {
   if (order.buySellIndicator == 'B') {
-    return handleBuyOrder(order, restingIdx, removedRefs);
+    handleBuyOrder(order, restingIdx, removedRefs, executedOrders);
   } else if (order.buySellIndicator == 'S') {
-    return handleSellOrder(order, restingIdx, removedRefs);
+    handleSellOrder(order, restingIdx, removedRefs, executedOrders);
   } else {
     throw std::runtime_error("Invalid buy/sell indicator");
   }

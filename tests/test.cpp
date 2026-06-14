@@ -135,10 +135,15 @@ struct TestBook {
   OrderBook ob{&pool};
   uint32_t lastRestingIdx = INVALID_INDEX;
   std::vector<uint64_t> removed;
+  std::vector<ItchOrderExecuted> executed;
 
-  std::vector<ItchOrderExecuted> add(Order order) {
+  // Returns a reference into TestBook's own buffer so callers can either
+  // `auto& e = tb.add(...)` (no copy) or `auto e = tb.add(...)` (copy).
+  const std::vector<ItchOrderExecuted>& add(Order order) {
     removed.clear();
-    return ob.handleOrder(order, lastRestingIdx, removed);
+    executed.clear();
+    ob.handleOrder(order, lastRestingIdx, removed, executed);
+    return executed;
   }
 
   void del(uint32_t idx) { ob.removeByIndex(idx); }

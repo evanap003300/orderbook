@@ -22,13 +22,16 @@ class OrderBook {
   explicit OrderBook(OrderPool* pool)
       : pool(pool), bids(/*isBid=*/true), asks(/*isBid=*/false) {}
 
-  // Matches `order` against the book and returns the execution records. If the
-  // order (or its unfilled remainder) rests, `restingIdx` is set to its pool
-  // index; otherwise it is INVALID_INDEX. Resting orders that are fully filled
-  // during matching have their reference numbers appended to `removedRefs` so
-  // the engine can drop them from its order map.
-  std::vector<ItchOrderExecuted> handleOrder(Order& order, uint32_t& restingIdx,
-                                             std::vector<uint64_t>& removedRefs);
+  // Matches `order` against the book and appends one execution record per
+  // match to `executedOrders`. If the order (or its unfilled remainder) rests,
+  // `restingIdx` is set to its pool index; otherwise it is INVALID_INDEX.
+  // Resting orders that are fully filled during matching have their reference
+  // numbers appended to `removedRefs` so the engine can drop them from its
+  // order map. The caller is responsible for clear()-ing the output buffers
+  // before the call; reusing them across calls avoids per-message allocation.
+  void handleOrder(Order& order, uint32_t& restingIdx,
+                   std::vector<uint64_t>& removedRefs,
+                   std::vector<ItchOrderExecuted>& executedOrders);
 
   // Removes the order at the given pool index from its price level and frees
   // the slot. The engine resolves a reference number to a pool index first.
@@ -39,8 +42,10 @@ class OrderBook {
   LadderSide bids;
   LadderSide asks;
 
-  std::vector<ItchOrderExecuted> handleBuyOrder(
-      Order& order, uint32_t& restingIdx, std::vector<uint64_t>& removedRefs);
-  std::vector<ItchOrderExecuted> handleSellOrder(
-      Order& order, uint32_t& restingIdx, std::vector<uint64_t>& removedRefs);
+  void handleBuyOrder(Order& order, uint32_t& restingIdx,
+                      std::vector<uint64_t>& removedRefs,
+                      std::vector<ItchOrderExecuted>& executedOrders);
+  void handleSellOrder(Order& order, uint32_t& restingIdx,
+                       std::vector<uint64_t>& removedRefs,
+                       std::vector<ItchOrderExecuted>& executedOrders);
 };

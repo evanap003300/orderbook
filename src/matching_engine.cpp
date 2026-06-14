@@ -53,8 +53,12 @@ void MatchingEngine::run() {
   uint16_t messageLength;
   char messageType;
   uint16_t stockLocate;
+  // Reused buffers; clear()-ed before each Add so capacity is preserved and
+  // we don't allocate per message.
   std::vector<ItchOrderExecuted> executedOrders;
+  executedOrders.reserve(1024);
   std::vector<uint64_t> removedRefs;
+  removedRefs.reserve(1024);
   Order order;
   DeleteOrder deleteOrder;
   uint64_t orderReferenceNumber;
@@ -77,10 +81,11 @@ void MatchingEngine::run() {
         stockLocate = ntohs(*reinterpret_cast<const uint16_t*>(data));
         order = parser.readAddOrder(data);
         removedRefs.clear();
+        executedOrders.clear();
         uint32_t restingIdx;
         auto start = std::chrono::high_resolution_clock::now();
-        executedOrders =
-            orderBooks[stockLocate].handleOrder(order, restingIdx, removedRefs);
+        orderBooks[stockLocate].handleOrder(order, restingIdx, removedRefs,
+                                            executedOrders);
         auto end_time = std::chrono::high_resolution_clock::now();
 
         // Resting orders consumed during matching are gone; drop their entries.
