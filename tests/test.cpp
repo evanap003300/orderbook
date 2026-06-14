@@ -354,3 +354,82 @@ TEST(OrderBookTest, PoolSlotReusedAfterFill) {
   tb.add(sell2);  // should reclaim the freed slot
   EXPECT_EQ(tb.lastRestingIdx, sellIdx);
 }
+
+// Ladder-specific paths: overflow, best-across-both, walking down levels.
+
+// 950 isn't a TICK (=100) multiple, so it lives in the overflow map rather
+// than the ladder. Matching must still treat it as a regular ask.
+TEST(OrderBookTest, UnalignedPriceUsesOverflow) {
+  TestBook tb;
+  Order sell{0, 1, 100, 950, 'S'};
+  tb.add(sell);
+
+  Order buy{0, 2, 100, 1000, 'B'};
+  auto executed = tb.add(buy);
+  ASSERT_EQ(executed.size(), 1);
+  EXPECT_EQ(executed[0].executed_shares, 100);
+  EXPECT_EQ(executed[0].order_reference_number, 1u);
+  ASSERT_EQ(tb.removed.size(), 1u);
+  EXPECT_EQ(tb.removed[0], 1u);
+}
+
+// A bid above the ladder window (window covers base..base+WINDOW*TICK) lands in
+// overflow. bestLevel() must pick it over the in-ladder bid.
+TEST(OrderBookTest, OverflowBidBeatsLadderBid) {
+  TestBook tb;
+  Order ladderBid{0, 1, 50, 1000, 'B'};  // anchors bids at base=0; slot 10
+  tb.add(ladderBid);
+  Order farBid{0, 2, 50, 250000, 'B'};   // > WINDOW*TICK from base -> overflow
+  tb.add(farBid);
+
+  Order sell{0, 3, 50, 100, 'S'};
+  auto executed = tb.add(sell);
+  ASSERT_EQ(executed.size(), 1);
+  // Best bid is the overflow one (price 250000), so ref 2 fills first.
+  EXPECT_EQ(executed[0].order_reference_number, 2u);
+}
+
+// Three bids at adjacent slots; each sweep removes the current best and the
+// next-best must surface. Exercises advanceBest scanning across slots.
+TEST(OrderBookTest, BestSlotAdvancesAfterEachSweep) {
+  TestBook tb;
+  Order b1{0, 1, 30, 1000, 'B'};
+  Order b2{0, 2, 30, 1100, 'B'};
+  Order b3{0, 3, 30, 1200, 'B'};
+  tb.add(b1);
+  tb.add(b2);
+  tb.add(b3);
+
+  Order sell1{0, 4, 30, 800, 'S'};  // best bid 1200
+  auto e1 = tb.add(sell1);
+  ASSERT_EQ(e1.size(), 1);
+  EXPECT_EQ(e1[0].order_reference_number, 3u);
+
+  Order sell2{0, 5, 30, 800, 'S'};  // best bid now 1100
+  auto e2 = tb.add(sell2);
+  ASSERT_EQ(e2.size(), 1);
+  EXPECT_EQ(e2[0].order_reference_number, 2u);
+
+  Order sell3{0, 6, 30, 800, 'S'};  // best bid now 1000
+  auto e3 = tb.add(sell3);
+  ASSERT_EQ(e3.size(), 1);
+  EXPECT_EQ(e3[0].order_reference_number, 1u);
+}
+
+// Deleting an overflow order goes through the overflow path of remove(); the
+// remaining ladder order should still be findable on the next match.
+TEST(OrderBookTest, DeleteOverflowOrderLeavesLadderIntact) {
+  TestBook tb;
+  Order ladderBid{0, 1, 50, 1000, 'B'};
+  tb.add(ladderBid);
+  Order overBid{0, 2, 50, 950, 'B'};  // unaligned -> overflow
+  tb.add(overBid);
+  uint32_t overIdx = tb.lastRestingIdx;
+
+  tb.del(overIdx);
+
+  Order sell{0, 3, 50, 1000, 'S'};
+  auto executed = tb.add(sell);
+  ASSERT_EQ(executed.size(), 1);
+  EXPECT_EQ(executed[0].order_reference_number, 1u);  // the ladder bid
+}

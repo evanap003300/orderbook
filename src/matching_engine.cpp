@@ -4,8 +4,11 @@
 #include <cstdio>
 #include <string>
 
-MatchingEngine::MatchingEngine() : pool(16777216), orderMap(33554432) {
-  latencies.reserve(10000000);
+MatchingEngine::MatchingEngine() : pool(67108864), orderMap(33554432) {
+  // A full ITCH trading day has ~136M Add messages; reserving up front avoids
+  // vector grow events during the timed loop (which show up as ms-scale tail
+  // spikes).
+  latencies.reserve(150000000);
   orderBooks.reserve(65536);
   for (uint32_t i = 0; i < 65536; i++) {
     orderBooks.emplace_back(&pool);

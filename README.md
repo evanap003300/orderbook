@@ -1,11 +1,13 @@
 # Matching Engine — Built for Speed
 
 ## Status
-- Mean Latency: 2375.04 nanoseconds
-- Median Latency: 875.00 nanoseconds
-- Std Dev: 49303.58 nanoseconds
-- 99th Percentile Latency: 16416.00 nanoseconds
-- 99.9th Percentile Latency: 132083.00 nanoseconds
+Measured over 136.5M Add messages on a full NASDAQ ITCH 5.0 trading day:
+- Mean Latency: 95.7 nanoseconds
+- Median Latency: 42 nanoseconds
+- 90th Percentile Latency: 208 nanoseconds
+- 99th Percentile Latency: 792 nanoseconds
+- 99.9th Percentile Latency: 2,291 nanoseconds
+- 99.99th Percentile Latency: 12,125 nanoseconds
 
 ## To-dos:
 - [ ] Make it faster (custom memory management, cache allignment, core pinning, branchless programming, and more)
