@@ -11,7 +11,19 @@ cmake --build build
 ./build/order_matching           # processes itch_data.NASDAQ_ITCH50, writes latencies.txt
 ```
 
-The ITCH file is 9.5 GB and not in git — Evan has a local copy. The engine `mmap`s it; full run takes ~3 minutes and pushes ~136M Add messages through. Don't run it without asking — it's not instant.
+The ITCH file is 9.5 GB and not in git. The engine `mmap`s it; full run takes ~3 minutes and pushes ~136M Add messages through. Don't run it without asking — it's not instant.
+
+**Getting the ITCH file** (the engine looks for `itch_data.NASDAQ_ITCH50` at the repo root, relative path, so run the binary from the repo root not from `build/`):
+
+```sh
+# NASDAQ publishes sample full-day ITCH 5.0 captures at https://emi.nasdaq.com/ITCH/Nasdaq%20ITCH/
+# Filenames are MMDDYYYY.NASDAQ_ITCH50.gz, ~3.5-5 GB gzipped, ~9-10 GB raw.
+curl -O https://emi.nasdaq.com/ITCH/Nasdaq%20ITCH/01302019.NASDAQ_ITCH50.gz
+curl -O https://emi.nasdaq.com/ITCH/Nasdaq%20ITCH/01302019.NASDAQ_ITCH50.md5sum
+md5sum -c 01302019.NASDAQ_ITCH50.md5sum
+gunzip 01302019.NASDAQ_ITCH50.gz
+mv 01302019.NASDAQ_ITCH50 itch_data.NASDAQ_ITCH50
+```
 
 Clangd in-editor often shows false "file not found" / undeclared-identifier errors because it doesn't know the `-Iinclude` from CMakeLists. **Trust the CMake build, not clangd.**
 
