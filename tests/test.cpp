@@ -438,3 +438,58 @@ TEST(OrderBookTest, DeleteOverflowOrderLeavesLadderIntact) {
   ASSERT_EQ(executed.size(), 1);
   EXPECT_EQ(executed[0].order_reference_number, 1u);  // the ladder bid
 }
+
+// Several overflow asks (all unaligned) added out of price order; a sweeping
+// buy must fill them lowest-price-first. Exercises the sorted-vector ordering
+// and the front-pop / shift path on the ask side.
+TEST(OrderBookTest, MultipleOverflowAsksMatchInPriceOrder) {
+  TestBook tb;
+  Order a1{0, 1, 10, 1150, 'S'};  // unaligned -> overflow
+  Order a2{0, 2, 10, 950, 'S'};   // unaligned -> overflow (lowest)
+  Order a3{0, 3, 10, 1050, 'S'};  // unaligned -> overflow
+  tb.add(a1);
+  tb.add(a2);
+  tb.add(a3);
+
+  Order buy{0, 4, 30, 2000, 'B'};  // crosses all three
+  auto executed = tb.add(buy);
+  ASSERT_EQ(executed.size(), 3u);
+  EXPECT_EQ(executed[0].order_reference_number, 2u);  // 950 first
+  EXPECT_EQ(executed[1].order_reference_number, 3u);  // 1050
+  EXPECT_EQ(executed[2].order_reference_number, 1u);  // 1150
+}
+
+// Same for bids: a sweeping sell must fill highest-price-first, exercising the
+// back-pop path on the bid side.
+TEST(OrderBookTest, MultipleOverflowBidsMatchInPriceOrder) {
+  TestBook tb;
+  Order b1{0, 1, 10, 950, 'B'};   // unaligned -> overflow
+  Order b2{0, 2, 10, 1150, 'B'};  // unaligned -> overflow (highest)
+  Order b3{0, 3, 10, 1050, 'B'};  // unaligned -> overflow
+  tb.add(b1);
+  tb.add(b2);
+  tb.add(b3);
+
+  Order sell{0, 4, 30, 100, 'S'};  // crosses all three
+  auto executed = tb.add(sell);
+  ASSERT_EQ(executed.size(), 3u);
+  EXPECT_EQ(executed[0].order_reference_number, 2u);  // 1150 first
+  EXPECT_EQ(executed[1].order_reference_number, 3u);  // 1050
+  EXPECT_EQ(executed[2].order_reference_number, 1u);  // 950
+}
+
+// A single incoming order whose match walks from the ladder into the overflow:
+// the ladder ask (1000) is better than the overflow ask (1050) and fills first.
+TEST(OrderBookTest, MatchSweepsLadderThenOverflowAsk) {
+  TestBook tb;
+  Order ladderAsk{0, 1, 10, 1000, 'S'};  // aligned -> ladder
+  tb.add(ladderAsk);
+  Order overAsk{0, 2, 10, 1050, 'S'};    // unaligned -> overflow
+  tb.add(overAsk);
+
+  Order buy{0, 3, 20, 2000, 'B'};  // crosses both
+  auto executed = tb.add(buy);
+  ASSERT_EQ(executed.size(), 2u);
+  EXPECT_EQ(executed[0].order_reference_number, 1u);  // ladder 1000 first
+  EXPECT_EQ(executed[1].order_reference_number, 2u);  // then overflow 1050
+}

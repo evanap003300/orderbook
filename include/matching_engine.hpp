@@ -30,5 +30,4 @@ class MatchingEngine {
       orderMap;
   std::vector<OrderBook> orderBooks;
   void logExecutedOrders(const std::vector<ItchOrderExecuted>& executedOrders);
-  inline uint64_t rdtsc();
 };

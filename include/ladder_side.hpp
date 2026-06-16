@@ -1,7 +1,8 @@
 #pragma once
 #include <stdint.h>
 
-#include <map>
+#include <algorithm>
+#include <utility>
 #include <vector>
 
 #include "order_pool.hpp"
@@ -20,9 +21,13 @@ struct Level {
 //                 slot = (price - base) / TICK. Lazily allocated on first use;
 //                 `base` is centered on the first price so subsequent activity
 //                 stays in the window.
-//   * `overflow`- ordered map of (price -> Level) for prices outside the window
-//                 or not on a TICK multiple. Slow path; sorted so we can read
-//                 its best in O(log N).
+//   * `overflow`- (price, Level) pairs kept sorted ascending by price, for
+//                 prices outside the window or not on a TICK multiple. A flat
+//                 vector rather than std::map: contiguous, no per-node heap
+//                 allocation, and the best sits at an end (back for bids, front
+//                 for asks). Profiling showed ~22% of resting orders land here,
+//                 so the slow path has to be cache-friendly, not a red-black
+//                 tree of scattered nodes.
 //
 // Best tracking:
 //   * `bestSlot` is the highest populated slot for bids, lowest for asks, or
@@ -50,7 +55,11 @@ class LadderSide {
         bestSlot = slot;
       }
     } else {
-      linkAtTail(pool, overflow[price], idx);
+      auto it = overflowLowerBound(price);
+      if (it == overflow.end() || it->first != price) {
+        it = overflow.insert(it, {price, Level{}});
+      }
+      linkAtTail(pool, it->second, idx);
     }
   }
 
@@ -65,8 +74,8 @@ class LadderSide {
         advanceBest();
       }
     } else {
-      auto it = overflow.find(price);
-      if (it == overflow.end()) return;
+      auto it = overflowLowerBound(price);
+      if (it == overflow.end() || it->first != price) return;
       unlink(pool, it->second, idx);
       if (it->second.head == INVALID_INDEX) {
         overflow.erase(it);
@@ -86,22 +95,21 @@ class LadderSide {
       priceOut = slotToPrice(bestSlot);
       return &ladder[bestSlot];
     }
+    // The best overflow price sits at an end of the sorted vector.
+    std::pair<uint32_t, Level>& edge = bid ? overflow.back() : overflow.front();
     if (ladderEmpty) {
-      auto it = bid ? std::prev(overflow.end()) : overflow.begin();
-      priceOut = it->first;
-      return &it->second;
+      priceOut = edge.first;
+      return &edge.second;
     }
     uint32_t ladderPrice = slotToPrice(bestSlot);
-    auto it = bid ? std::prev(overflow.end()) : overflow.begin();
-    uint32_t overflowPrice = it->first;
     bool ladderWins =
-        bid ? (ladderPrice >= overflowPrice) : (ladderPrice <= overflowPrice);
+        bid ? (ladderPrice >= edge.first) : (ladderPrice <= edge.first);
     if (ladderWins) {
       priceOut = ladderPrice;
       return &ladder[bestSlot];
     }
-    priceOut = overflowPrice;
-    return &it->second;
+    priceOut = edge.first;
+    return &edge.second;
   }
 
   // Called after the matching loop drains a level. Updates best tracking /
@@ -113,17 +121,31 @@ class LadderSide {
         advanceBest();
       }
     } else {
-      overflow.erase(price);
+      auto it = overflowLowerBound(price);
+      if (it != overflow.end() && it->first == price) {
+        overflow.erase(it);
+      }
     }
   }
 
  private:
+  using OverflowVec = std::vector<std::pair<uint32_t, Level>>;
+
   bool bid;
   std::vector<Level> ladder;
-  std::map<uint32_t, Level> overflow;
+  OverflowVec overflow;  // sorted ascending by price
   uint32_t base = 0;
   bool anchored = false;
   uint32_t bestSlot = INVALID_INDEX;
+
+  // First overflow element whose price is >= `price` (binary search).
+  OverflowVec::iterator overflowLowerBound(uint32_t price) {
+    return std::lower_bound(
+        overflow.begin(), overflow.end(), price,
+        [](const std::pair<uint32_t, Level>& e, uint32_t p) {
+          return e.first < p;
+        });
+  }
 
   void anchor(uint32_t price) {
     uint64_t half = static_cast<uint64_t>(WINDOW / 2) * TICK;

@@ -1,26 +1,21 @@
 #include "matching_engine.hpp"
 
-#include <chrono>
+#include <time.h>
+#include <x86intrin.h>
+
 #include <cstdio>
 #include <string>
 
-MatchingEngine::MatchingEngine() : pool(67108864), orderMap(33554432) {
+MatchingEngine::MatchingEngine() : pool(67108864), orderMap(8388608) {
   // A full ITCH trading day has ~136M Add messages; reserving up front avoids
   // vector grow events during the timed loop (which show up as ms-scale tail
-  // spikes).
+  // spikes). orderMap is sized for the measured peak of ~2.1M live orders:
+  // 8.4M slots keeps the load factor ~25% (was 33.5M / 512 MB at ~6% load).
   latencies.reserve(150000000);
   orderBooks.reserve(65536);
   for (uint32_t i = 0; i < 65536; i++) {
     orderBooks.emplace_back(&pool);
   }
-}
-
-// Use cpu timestamp counter for latency measurement
-inline uint64_t MatchingEngine::rdtsc() {
-  /*unsigned int lo, hi;
-  __asm__ __volatile__("rdtsc" : "=a"(lo), "=d"(hi));
-  return ((uint64_t)hi << 32) | lo; */
-  return 0;
 }
 
 void MatchingEngine::logExecutedOrders(
@@ -64,6 +59,27 @@ void MatchingEngine::run() {
   uint64_t orderReferenceNumber;
   uint64_t messageCount = 0;
 
+  // Calibrate the TSC against CLOCK_MONOTONIC once, before the timed loop. The
+  // TSC is invariant on this CPU (constant tick rate regardless of core P-state),
+  // so cycles-per-ns stays valid even while the governor throttles the core.
+  auto monoNs = []() {
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return static_cast<uint64_t>(ts.tv_sec) * 1000000000ull + ts.tv_nsec;
+  };
+  unsigned tscAux;
+  uint64_t calNs0 = monoNs();
+  uint64_t calCycles0 = __rdtscp(&tscAux);
+  uint64_t calNs1;
+  do {
+    calNs1 = monoNs();
+  } while (calNs1 - calNs0 < 100000000ull);  // ~100 ms
+  uint64_t calCycles1 = __rdtscp(&tscAux);
+  double cyclesPerNs =
+      static_cast<double>(calCycles1 - calCycles0) / (calNs1 - calNs0);
+  fprintf(stderr, "TSC calibrated: %.4f cycles/ns (%.1f MHz)\n", cyclesPerNs,
+          cyclesPerNs * 1000.0);
+
   while (data < end) {
     messageLength = ntohs(*reinterpret_cast<const uint16_t*>(data));
     data += 2;
@@ -83,10 +99,10 @@ void MatchingEngine::run() {
         removedRefs.clear();
         executedOrders.clear();
         uint32_t restingIdx;
-        auto start = std::chrono::high_resolution_clock::now();
+        uint64_t startCycles = __rdtscp(&tscAux);
         orderBooks[stockLocate].handleOrder(order, restingIdx, removedRefs,
                                             executedOrders);
-        auto end_time = std::chrono::high_resolution_clock::now();
+        uint64_t endCycles = __rdtscp(&tscAux);
 
         // Resting orders consumed during matching are gone; drop their entries.
         for (uint64_t ref : removedRefs) {
@@ -100,8 +116,8 @@ void MatchingEngine::run() {
           orderMap.insert(orderReferenceNumber, {stockLocate, restingIdx});
         }
 
-        auto latency = end_time - start;
-        latencies.push_back(latency.count());
+        // Store raw TSC cycles; converted to ns in one pass after the loop.
+        latencies.push_back(endCycles - startCycles);
         break;
       }
       case 'D': {
@@ -122,6 +138,11 @@ void MatchingEngine::run() {
         data += messageLength - 1;
         break;
     }
+  }
+
+  // Convert recorded cycle counts to nanoseconds, off the hot path.
+  for (uint64_t& cycles : latencies) {
+    cycles = static_cast<uint64_t>(cycles / cyclesPerNs);
   }
 
   munmap(file, fileSize);
