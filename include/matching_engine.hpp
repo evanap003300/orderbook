@@ -26,7 +26,8 @@ class MatchingEngine {
 
  private:
   OrderPool pool;
-  FlatHashMap<uint64_t, OrderLocation, std::numeric_limits<uint64_t>::max()>
+  FlatHashMap<uint64_t, OrderLocation, std::numeric_limits<uint64_t>::max(),
+              /*Identity=*/true>
       orderMap;
   std::vector<OrderBook> orderBooks;
   void logExecutedOrders(const std::vector<ItchOrderExecuted>& executedOrders);

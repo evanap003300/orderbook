@@ -1,5 +1,6 @@
 #pragma once
 #include <stdint.h>
+#include <sys/mman.h>
 
 #include <vector>
 
@@ -49,6 +50,10 @@ class OrderPool {
   void free(uint32_t idx) {
     nodes[idx].next = freeHead;
     freeHead = idx;
+  }
+
+  void hugepages() {
+    madvise(nodes.data(), nodes.capacity() * sizeof(PoolNode), MADV_HUGEPAGE);
   }
 
   PoolNode& operator[](uint32_t idx) { return nodes[idx]; }

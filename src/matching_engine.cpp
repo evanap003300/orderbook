@@ -16,6 +16,10 @@ MatchingEngine::MatchingEngine() : pool(67108864), orderMap(8388608) {
   for (uint32_t i = 0; i < 65536; i++) {
     orderBooks.emplace_back(&pool);
   }
+  pool.hugepages();
+  orderMap.hugepages();
+  madvise(latencies.data(), latencies.capacity() * sizeof(uint64_t),
+          MADV_HUGEPAGE);
 }
 
 void MatchingEngine::logExecutedOrders(
@@ -40,6 +44,7 @@ void MatchingEngine::run() {
     close(fd);
     return;
   }
+  madvise(file, fileSize, MADV_SEQUENTIAL);
 
   const char* data = static_cast<const char*>(file);
   const char* end = data + fileSize;
@@ -91,6 +96,24 @@ void MatchingEngine::run() {
 
     messageType = *data;
     data++;
+
+    // Prefetch the next A/D message's orderMap slot while we process this one.
+    // Both 'A' and 'D' have orderRef at byte 13 from their message start
+    // (length(2) + type(1) + locate(2) + tracking(2) + timestamp(6) = 13).
+    {
+      const char* next = data + (messageLength - 1);
+      if (next + 21 <= end) {
+        char nt = next[2];
+        if (nt == 'A' || nt == 'D') {
+          uint32_t hi, lo;
+          memcpy(&hi, next + 13, 4);
+          memcpy(&lo, next + 17, 4);
+          uint64_t ref =
+              (static_cast<uint64_t>(ntohl(hi)) << 32) | ntohl(lo);
+          orderMap.prefetch(ref);
+        }
+      }
+    }
 
     switch (messageType) {
       case 'A': {

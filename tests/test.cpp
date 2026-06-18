@@ -124,6 +124,53 @@ TEST(FlatHashMapTest, LargeNumberOfInsertsAndErases) {
   }
 }
 
+// Identity hashing (key & mask): keys differing by a multiple of capacity
+// collide and must still be found/erased via probing + robin-hood backshift.
+TEST(FlatHashMapTest, IdentityHashHandlesCollisions) {
+  FlatHashMap<uint64_t, uint16_t, EMPTY_KEY, /*Identity=*/true> map(8);
+  map.insert(1, 10);
+  map.insert(9, 90);    // 9 & 7 == 1 -> collides with key 1
+  map.insert(17, 170);  // 17 & 7 == 1 -> collides too
+  ASSERT_NE(map.find(1), nullptr);
+  EXPECT_EQ(*map.find(1), 10);
+  ASSERT_NE(map.find(9), nullptr);
+  EXPECT_EQ(*map.find(9), 90);
+  ASSERT_NE(map.find(17), nullptr);
+  EXPECT_EQ(*map.find(17), 170);
+
+  map.erase(9);  // backshift across the collision cluster
+  EXPECT_EQ(map.find(9), nullptr);
+  ASSERT_NE(map.find(1), nullptr);
+  EXPECT_EQ(*map.find(1), 10);
+  ASSERT_NE(map.find(17), nullptr);
+  EXPECT_EQ(*map.find(17), 170);
+}
+
+// Regression: erasing a key whose probe chain wraps around the table boundary
+// must not leave a hole that disconnects keys placed beyond the wrap.
+// With mask=7: insert 7 (home 7), 0 (home 0), 1 (home 1), 2 (home 2),
+// then 15 (home 7 → probes 7→0→1→2→3). Erase 0 must shift 15 into slot 0
+// so find(15) still works.
+TEST(FlatHashMapTest, IdentityHashEraseWrapAroundChain) {
+  FlatHashMap<uint64_t, uint16_t, EMPTY_KEY, /*Identity=*/true> map(8);
+  map.insert(7, 70);
+  map.insert(0, 0);
+  map.insert(1, 10);
+  map.insert(2, 20);
+  map.insert(15, 150);  // home=15&7=7, probes 7→0→1→2→3
+
+  map.erase(0);
+  EXPECT_EQ(map.find(0), nullptr);
+  ASSERT_NE(map.find(7), nullptr);
+  EXPECT_EQ(*map.find(7), 70);
+  ASSERT_NE(map.find(1), nullptr);
+  EXPECT_EQ(*map.find(1), 10);
+  ASSERT_NE(map.find(2), nullptr);
+  EXPECT_EQ(*map.find(2), 20);
+  ASSERT_NE(map.find(15), nullptr);  // was lost with the old algorithm
+  EXPECT_EQ(*map.find(15), 150);
+}
+
 // OrderBook tests
 //
 // The engine resolves a delete's reference number to a pool index before
