@@ -7,8 +7,8 @@ A C++17 NASDAQ ITCH 5.0 matching engine focused on low-latency order processing.
 ```sh
 cmake -S . -B build              # only needed first time / after CMakeLists changes
 cmake --build build
-./build/run_tests                # 30 tests, completes in ms
-./build/order_matching           # processes itch_data.NASDAQ_ITCH50, writes latencies.txt
+./build/run_tests                # 35 tests, completes in ms
+./build/order_matching           # processes itch_data.NASDAQ_ITCH50, writes latencies.txt (~50s)
 ```
 
 The ITCH file is 9.5 GB and not in git. The engine `mmap`s it; full run takes ~3 minutes and pushes ~136M Add messages through. Don't run it without asking — it's not instant.
@@ -47,7 +47,7 @@ tests/test.cpp        FlatHashMap tests + OrderBook tests via a TestBook fixture
 The pieces:
 
 - **`OrderPool`** is one flat `vector<PoolNode>` shared engine-wide. `PoolNode { Order order; uint32 next, prev; }`. `allocate()` pops a free slot or pushes back; `free()` links to free head. Indices are stable; the pool is never resized in a way that invalidates them (just `push_back` past current size).
-- **`LadderSide`** has a `ladder` (fixed-size `vector<Level>`, indexed by `(price - base) / TICK`, lazily allocated, anchored centered on first price), an `overflow` `std::map<price, Level>` for misaligned/out-of-window prices, and `bestSlot` tracking. `TICK = 100` (NMS penny granularity in ITCH 1/10000-dollar units), `WINDOW = 2048` (~$20.48 range). `bestLevel()` picks the better of the ladder vs the overflow's edge.
+- **`LadderSide`** has a `ladder` (fixed-size `vector<Level>`, indexed by `(price - base) / TICK`, lazily allocated, anchored centered on first price), an `overflow` flat sorted `vector<pair<price, Level>>` for out-of-window prices, and `bestSlot` tracking. `TICK = 100` (NMS penny granularity in ITCH 1/10000-dollar units), `WINDOW = 2048` (~$20.48 range). `bestLevel()` picks the better of the ladder vs the overflow's edge. Overflow was formerly `std::map` but handled 22% of resting orders (mostly window-misses, not sub-penny), so it was replaced with a flat vector.
 - **`OrderBook`** holds an `OrderPool*` and two `LadderSide`s (bid + ask). API:
   - `handleOrder(Order&, restingIdx&, removedRefs&, executedOrders&)` — all results via reused out-param buffers. Returns void. Caller `clear()`s the buffers before calling.
   - `removeByIndex(uint32)` — O(1) delete given the pool index.
@@ -63,42 +63,54 @@ These are non-obvious and worth understanding before changing anything:
 2. **Engine resolves deletes (Variant B).** `orderMap` value type is `{stockLocate, poolIdx}`. On delete the engine looks up, then calls `orderBooks[loc].removeByIndex(idx)`. No per-book `orderRef → idx` map. `handleDeleteOrder(DeleteOrder&)` does not exist; you delete by pool index.
 3. **Fully-filled resting orders are reported via `removedRefs`.** Matching frees the pool slot — but the engine's `orderMap` still references it until told. The engine `clear()`s and `erase()`s `removedRefs` from `orderMap` **before** inserting the new resting ref (a freed slot can be reused in the same message; erase-before-insert keeps the map consistent).
 4. **`PoolNode` wraps `Order` rather than adding next/prev to it.** Keeps the ITCH wire-parsing struct (`Order`) clean and unaware of storage linkage.
-5. **Ladder TICK=100, WINDOW=2048.** NMS Rule 612 mandates penny ticks for ≥$1 stocks (most volume), so most prices land in the ladder fast path. Sub-penny / out-of-window prices go to the overflow map — correctness preserved without paying for it in the hot path.
+5. **Ladder TICK=100, WINDOW=2048.** NMS Rule 612 mandates penny ticks for ≥$1 stocks (most volume), so most prices land in the ladder fast path. Sub-penny / out-of-window prices go to the overflow vector — correctness preserved without paying for it in the hot path.
 6. **All matching output goes through reused out-param buffers** (executed records, removed refs, resting idx). The engine `clear()`s them per call; the allocator gets hit at startup, not per message.
+7. **`FlatHashMap` uses identity hash (`key & mask`) for `orderMap`.** ITCH order reference numbers are globally near-sequential (min=92, max=264M over a day). Identity hash places consecutive refs in adjacent slots → live working set is a ~33 MB migrating band rather than scattered across 128 MB → much better cache locality. `bool Identity` is a compile-time template parameter.
+8. **`FlatHashMap::erase` uses Knuth's Algorithm R.** The naive Robin-Hood backward-shift erase stops when it hits an element at its home position, leaving holes that break wrap-around probe chains. With identity hash + sequential refs wrapping every ~8.4M orders, this caused lost keys → table filled with ghosts → infinite loop. Algorithm R continues scanning past unmovable elements. Regression test: `IdentityHashEraseWrapAroundChain`.
+9. **orderMap is 8.4M slots (128 MB), not 33.5M (512 MB).** Peak live orders measured at 2.1M (~25% load). Smaller table means most of the working set fits in fewer cache lines. Direct-indexed array ruled out: ref span 264M vs 2.1M live → 2 GB mostly-dead array.
 
 ## Current performance
 
-Measured over 136.5M Add messages on a full NASDAQ ITCH 5.0 trading day, macOS (post Phase 4):
+Measured over 163M Add messages on a full NASDAQ ITCH 5.0 trading day (01/30/2019), Linux i5-8350U, isolated core 3, performance governor @ 3.6 GHz, TSC timing:
 
 | Stat | Value |
 |------|------:|
-| mean | 84.1 ns |
-| p50 | 42 ns (near `high_resolution_clock` granularity floor) |
-| p90 | 167 ns |
-| p99 | 709 ns |
-| p99.9 | 2,042 ns |
-| p99.99 | 9,750 ns |
-| max | ~20 ms (run-to-run noise; OS stall) |
-| wall time | ~3 min for the whole 9.5 GB file (~750K msg/s on Add path) |
+| mean | 82.4 ns |
+| p50 | 56 ns |
+| p90 | 152 ns |
+| p99 | 418 ns |
+| p99.9 | 1,492 ns |
+| p99.99 | ~5,900 ns |
+| wall time | 49.4 s for the full 10.2 GB file |
 
-For context, the pre-flattening README baseline was p99.9 = 132,083 ns over ~10M samples — so the structural changes (FlatHashMap, intrusive list + flat pool, price ladder, reused out-param buffers) bought ~65× at p99.9.
+Pre-optimization Linux baseline (same machine, same file, before this work): mean 145.6 ns, p99 818 ns, wall 102.2 s. **Net gain: ~2× across the distribution body.**
 
-## What's next on the Linux machine
+For historical context, the pre-flattening macOS baseline was p99.9 = 132,083 ns — the structural changes (FlatHashMap, intrusive list + flat pool, price ladder, reused out-param buffers) bought ~65× at p99.9 before these Linux-phase optimizations.
 
-The work is moving to Linux specifically for the tooling. Planned order:
+Remaining ceiling: engine is still memory-bound (50% LLC miss rate, ~22 LLC misses per Add). Working set (2.1M live orders × 32 B pool + 128 MB orderMap) exceeds the 6 MB L3. Further gains need smaller data or a different architecture.
 
-1. **Re-benchmark on Linux.** Establish a clean baseline before profiling. Same workload (the 9.5 GB ITCH file).
-2. **Profile with `perf`.** Sampling profile (`perf record -g --call-graph dwarf ./build/order_matching`) and flame graph. Look for: hot branches in `LadderSide::bestLevel`, `FlatHashMap` probe sequences, the timer overhead under `high_resolution_clock` (the p50 of 42 ns is suspiciously close to the macOS chrono floor; on Linux it may reveal more), branch-mispredict / cache-miss stats via `perf stat -e ...`.
-3. **Huge pages.** The big eager allocations (orderMap ~512 MB committed, pool reserved at ~1.8 GB virtual) benefit from THP. Try `madvise(addr, len, MADV_HUGEPAGE)` on the underlying buffers or run with transparent hugepage always on.
-4. **Core isolation + pinning.** Boot kernel with `isolcpus=<core>` (or use `cset shield`), pin the engine to that core with `taskset -c <core>`, move IRQs off it. Quieter run, tighter tail.
-5. **Further structural opts** the profile reveals. Candidates: packing `PoolNode` from 28 B to 32 B for better cache-line behavior, batching `chrono` reads (per-N-messages), removing branches in the bestLevel hot path.
-6. **(Longer-term) live UDP feed.** Read ITCH 5.0 over multicast UDP instead of mmap'd file. Different shape: SPSC ring buffer, kernel bypass (DPDK / AF_XDP), no allocations in the receive path.
+## Benchmark setup (Linux)
+
+Core 3 is permanently isolated (`isolcpus=3 nohz_full=3 rcu_nocbs=3` in grub). Before each benchmark run:
+
+```sh
+echo performance | sudo tee /sys/devices/system/cpu/cpu*/cpufreq/scaling_governor
+taskset -c 3 ./build/order_matching
+```
+
+To undo isolation: remove the three flags from `/etc/default/grub`, run `sudo grub-mkconfig -o /boot/grub/grub.cfg`, reboot.
+
+## What's next
+
+1. **(Next) Live UDP feed.** Read ITCH 5.0 over multicast UDP instead of mmap'd file. Completely different shape: SPSC ring buffer from kernel, kernel bypass (DPDK / AF_XDP), no allocations in the receive path. Will naturally change the memory access pattern and may shift the bottleneck.
+2. **1-in-N timing sampling.** The two `rdtscp` calls per Add still cost ~20-30 ns. Sampling every 16th message gets overhead near zero with 10M+ samples still collected. Minor cosmetic improvement to the measured mean.
+3. **Re-profile after UDP.** The bottleneck will shift; don't optimize blind.
 
 ## Working style
 
 - **Explain tradeoffs before deciding.** Especially on API shape, allocation strategy, per-vs-engine-wide, what to put in tests. He wants to be the one who picks. Surface options, recommend, ask.
 - **Don't auto-commit.** He'll say when.
-- **Don't run the full engine without asking** — it churns ~3 minutes and the disk has been tight (was at 11 GB free when we last cleaned caches).
-- **Re-run `./build/run_tests` after non-trivial changes.** Fast and cheap; catches the obvious things.
+- **Don't run the full engine without asking** — it takes ~50 seconds but the ITCH file is 10.2 GB and disk space matters.
+- **Re-run `./build/run_tests` after non-trivial changes.** 35 tests, completes in ms.
 - **Be concise.** Short status updates, results tables, no narration of internal deliberation.
-- **Memory file** (`~/.claude/projects/.../memory/orderbook-flattening-plan.md`) on the macOS machine has the longer phased plan. Won't transfer — this CLAUDE.md is the durable handoff.
+- **Memory files** at `~/.claude/projects/.../memory/` have full profiling history and machine gotchas.
