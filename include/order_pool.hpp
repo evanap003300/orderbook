@@ -53,7 +53,9 @@ class OrderPool {
   }
 
   void hugepages() {
+#ifdef MADV_HUGEPAGE
     madvise(nodes.data(), nodes.capacity() * sizeof(PoolNode), MADV_HUGEPAGE);
+#endif
   }
 
   PoolNode& operator[](uint32_t idx) { return nodes[idx]; }

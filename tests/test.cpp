@@ -540,3 +540,185 @@ TEST(OrderBookTest, MatchSweepsLadderThenOverflowAsk) {
   EXPECT_EQ(executed[0].order_reference_number, 1u);  // ladder 1000 first
   EXPECT_EQ(executed[1].order_reference_number, 2u);  // then overflow 1050
 }
+
+// ============================================================================
+// Phase 5: SPSC ring, packet pool, MoldUDP64 framing
+// ============================================================================
+
+#include <atomic>
+#include <thread>
+
+#include "moldudp64.hpp"
+#include "packet_pool.hpp"
+#include "spsc_ring.hpp"
+
+// --- SpscRing ---------------------------------------------------------------
+
+TEST(SpscRingTest, PushPopRoundTrip) {
+  SpscRing<uint32_t> r(8);
+  EXPECT_TRUE(r.push(7));
+  uint32_t out = 0;
+  EXPECT_TRUE(r.pop(out));
+  EXPECT_EQ(out, 7u);
+}
+
+TEST(SpscRingTest, EmptyPopReturnsFalse) {
+  SpscRing<uint32_t> r(8);
+  uint32_t out;
+  EXPECT_FALSE(r.pop(out));
+}
+
+TEST(SpscRingTest, FullPushReturnsFalse) {
+  SpscRing<uint32_t> r(4);  // capacity 4 => 3 usable slots (one always open)
+  EXPECT_TRUE(r.push(1));
+  EXPECT_TRUE(r.push(2));
+  EXPECT_TRUE(r.push(3));
+  EXPECT_FALSE(r.push(4));  // full
+}
+
+TEST(SpscRingTest, WrapAroundManyCycles) {
+  SpscRing<uint32_t> r(8);
+  for (uint32_t i = 0; i < 100; ++i) {
+    EXPECT_TRUE(r.push(i));
+    uint32_t out;
+    EXPECT_TRUE(r.pop(out));
+    EXPECT_EQ(out, i);
+  }
+}
+
+TEST(SpscRingTest, ProducerConsumerThreads) {
+  SpscRing<uint64_t> r(1024);
+  constexpr uint64_t N = 100000;
+  std::atomic<bool> doneProducer{false};
+  std::thread prod([&]() {
+    for (uint64_t i = 0; i < N; ++i) {
+      while (!r.push(i)) std::this_thread::yield();
+    }
+    doneProducer.store(true);
+  });
+  uint64_t expected = 0;
+  while (expected < N) {
+    uint64_t out;
+    if (r.pop(out)) {
+      EXPECT_EQ(out, expected);
+      expected++;
+    }
+  }
+  prod.join();
+  EXPECT_EQ(expected, N);
+}
+
+// --- PacketPool -------------------------------------------------------------
+
+TEST(PacketPoolTest, AcquireReleaseReuses) {
+  PacketPool p(4);
+  uint32_t a = p.acquire();
+  uint32_t b = p.acquire();
+  EXPECT_NE(a, kPoolInvalid);
+  EXPECT_NE(b, kPoolInvalid);
+  EXPECT_NE(a, b);
+  p.release(a);
+  uint32_t c = p.acquire();
+  EXPECT_EQ(c, a);  // freed slot comes back first (Treiber stack)
+}
+
+TEST(PacketPoolTest, ExhaustionReturnsInvalid) {
+  PacketPool p(2);
+  EXPECT_NE(p.acquire(), kPoolInvalid);
+  EXPECT_NE(p.acquire(), kPoolInvalid);
+  EXPECT_EQ(p.acquire(), kPoolInvalid);
+}
+
+// --- MoldUDP64 round-trip ----------------------------------------------------
+
+TEST(MoldUdp64Test, BuildAndParseSingleMessage) {
+  uint8_t packet[256];
+  char sess[10] = {'S','E','S','S','I','O','N','0','0','1'};
+  const uint8_t msg[] = {'A', 0x00, 0x01, 0xAA, 0xBB};
+  const uint8_t* msgs[] = {msg};
+  uint16_t lens[] = {sizeof(msg)};
+
+  size_t n = buildMoldPacket(packet, sizeof(packet), sess, /*seq=*/42, msgs,
+                             lens, 1);
+  ASSERT_GT(n, kMoldHeaderBytes);
+
+  MoldHeader h;
+  parseMoldHeader(packet, h);
+  EXPECT_EQ(memcmp(h.session, sess, 10), 0);
+  EXPECT_EQ(h.sequenceNumber, 42u);
+  EXPECT_EQ(h.messageCount, 1u);
+
+  MoldMessageIterator it(packet + kMoldHeaderBytes, n - kMoldHeaderBytes);
+  uint16_t outLen;
+  const uint8_t* got = it.next(outLen);
+  ASSERT_NE(got, nullptr);
+  EXPECT_EQ(outLen, sizeof(msg));
+  EXPECT_EQ(memcmp(got, msg, sizeof(msg)), 0);
+  EXPECT_EQ(it.next(outLen), nullptr);
+}
+
+TEST(MoldUdp64Test, BuildAndParseMultipleMessages) {
+  uint8_t packet[512];
+  char sess[10] = {'S','E','S','S','I','O','N','0','0','2'};
+  const uint8_t m1[] = {'A', 1, 2, 3};
+  const uint8_t m2[] = {'D', 9, 8};
+  const uint8_t m3[] = {'A', 7, 7, 7, 7, 7};
+  const uint8_t* msgs[] = {m1, m2, m3};
+  uint16_t lens[] = {sizeof(m1), sizeof(m2), sizeof(m3)};
+
+  size_t n = buildMoldPacket(packet, sizeof(packet), sess, /*seq=*/1000, msgs,
+                             lens, 3);
+  ASSERT_GT(n, kMoldHeaderBytes);
+
+  MoldHeader h;
+  parseMoldHeader(packet, h);
+  EXPECT_EQ(h.sequenceNumber, 1000u);
+  EXPECT_EQ(h.messageCount, 3u);
+
+  MoldMessageIterator it(packet + kMoldHeaderBytes, n - kMoldHeaderBytes);
+  uint16_t outLen;
+  const uint8_t* g1 = it.next(outLen);
+  ASSERT_NE(g1, nullptr);
+  EXPECT_EQ(outLen, sizeof(m1));
+  EXPECT_EQ(memcmp(g1, m1, sizeof(m1)), 0);
+  const uint8_t* g2 = it.next(outLen);
+  ASSERT_NE(g2, nullptr);
+  EXPECT_EQ(outLen, sizeof(m2));
+  EXPECT_EQ(memcmp(g2, m2, sizeof(m2)), 0);
+  const uint8_t* g3 = it.next(outLen);
+  ASSERT_NE(g3, nullptr);
+  EXPECT_EQ(outLen, sizeof(m3));
+  EXPECT_EQ(memcmp(g3, m3, sizeof(m3)), 0);
+  EXPECT_EQ(it.next(outLen), nullptr);
+}
+
+TEST(MoldUdp64Test, TruncatedPacketReturnsNull) {
+  // Build a valid 2-message packet, then truncate the buffer mid-message-2.
+  uint8_t packet[256];
+  char sess[10] = {0};
+  const uint8_t m1[] = {'A', 1, 2};
+  const uint8_t m2[] = {'A', 9, 9, 9, 9};
+  const uint8_t* msgs[] = {m1, m2};
+  uint16_t lens[] = {sizeof(m1), sizeof(m2)};
+  size_t n = buildMoldPacket(packet, sizeof(packet), sess, 1, msgs, lens, 2);
+  ASSERT_GT(n, kMoldHeaderBytes);
+
+  // Chop off the last 3 bytes of m2's payload.
+  size_t truncated = n - 3;
+  MoldMessageIterator it(packet + kMoldHeaderBytes,
+                         truncated - kMoldHeaderBytes);
+  uint16_t outLen;
+  ASSERT_NE(it.next(outLen), nullptr);   // m1 ok
+  EXPECT_EQ(it.next(outLen), nullptr);   // m2 truncated -> nullptr
+}
+
+TEST(MoldUdp64Test, BigEndianSequenceNumberAcrossBoundary) {
+  // Sequence numbers larger than 2^32 to confirm the hi/lo word handling.
+  uint8_t packet[64];
+  char sess[10] = {0};
+  uint64_t seq = (uint64_t{1} << 40) | 12345;
+  buildMoldPacket(packet, sizeof(packet), sess, seq, nullptr, nullptr, 0);
+  MoldHeader h;
+  parseMoldHeader(packet, h);
+  EXPECT_EQ(h.sequenceNumber, seq);
+}

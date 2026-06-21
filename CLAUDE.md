@@ -36,12 +36,20 @@ include/
   ladder_side.hpp     One side (bid/ask) as a price ladder + overflow map + Level.
   orderbook.hpp       Per-symbol OrderBook: pool ptr + bids LadderSide + asks LadderSide.
   matching_engine.hpp Engine: owns pool, orderMap, 65536 OrderBooks.
+  spsc_ring.hpp       Lock-free SPSC ring (cache-line padded, PAUSE busy-spin).
+  packet_pool.hpp     Free-list arena of fixed-size UDP packet buffers.
+  moldudp64.hpp       MoldUDP64 packet header parser/builder + message iterator.
+  feed_handler.hpp    UDP receive thread API + FeedStats + PacketRef.
+  tsc.hpp             Portable monotonic cycle counter (rdtscp on x86, MONOTONIC ns elsewhere).
 src/
   itch.cpp            Parses ITCH Add / Delete wire format.
   orderbook.cpp       handleBuyOrder / handleSellOrder / removeByIndex.
-  matching_engine.cpp Engine loop: reads ITCH messages, dispatches A/D.
-  main.cpp            Entry point: runs engine, writes latencies.txt.
-tests/test.cpp        FlatHashMap tests + OrderBook tests via a TestBook fixture.
+  matching_engine.cpp Engine loop: file mode + processMessage().
+  engine_udp.cpp      UDP mode: spawns feed handler, consumes the ring.
+  feed_handler.cpp    recvmsg loop + MoldUDP64 framing + sequence-gap detect + SPSC push.
+  replay.cpp          Standalone binary: ITCH file -> MoldUDP64 packets over UDP.
+  main.cpp            Entry point: --file (default) | --udp.
+tests/test.cpp        FlatHashMap + OrderBook + SpscRing + PacketPool + MoldUDP64.
 ```
 
 The pieces:
@@ -100,17 +108,64 @@ taskset -c 3 ./build/order_matching
 
 To undo isolation: remove the three flags from `/etc/default/grub`, run `sudo grub-mkconfig -o /boot/grub/grub.cfg`, reboot.
 
-## What's next
+## Phase 5: UDP feed handler (in-progress — needs Linux benchmarking)
 
-1. **(Next) Live UDP feed.** Read ITCH 5.0 over multicast UDP instead of mmap'd file. Completely different shape: SPSC ring buffer from kernel, kernel bypass (DPDK / AF_XDP), no allocations in the receive path. Will naturally change the memory access pattern and may shift the bottleneck.
-2. **1-in-N timing sampling.** The two `rdtscp` calls per Add still cost ~20-30 ns. Sampling every 16th message gets overhead near zero with 10M+ samples still collected. Minor cosmetic improvement to the measured mean.
-3. **Re-profile after UDP.** The bottleneck will shift; don't optimize blind.
+Phase 5 added a real UDP feed-handler pipeline that decouples networking from matching. Two-thread architecture, SPSC ring, MoldUDP64 framing, sequence-gap detection. **Functionally complete on macOS dev; numbers must come from Linux.**
+
+Pipeline (one host, two threads):
+
+```
+replay binary  ──UDP/MoldUDP64──►  feed handler thread (recvmsg → mold parse → seq check
+                                    → memcpy into pool slot → push slot idx on SPSC ring)
+                                                  │
+                                                  ▼ ring of PacketRef {poolIdx, tWireCycles}
+                                       matching thread (spin-pop ring → MoldMessageIterator
+                                        → processMessage → return slot to pool)
+```
+
+Design decisions worth knowing:
+
+- **SPSC ring carries pre-allocated buffer indices, not pointers.** PacketPool owns a free-list of fixed 2 KiB slots; producer acquires, fills, pushes the index; consumer pops, walks, releases. Zero allocation on either hot path.
+- **Cache-line padding** on the ring's head/tail (`alignas(kCacheLineSize)`); without this the two cores ping-pong the same cache line on every push/pop.
+- **Busy-spin consumer with CPU PAUSE** — the matching thread spins on an empty ring with `pause` (x86) or `yield` (aarch64). Only safe because the matching thread is meant to live on an isolated core; on macOS dev it just steals a core, which is fine.
+- **Backpressure: drop on full.** Producer never blocks. Sequence-gap detection on the next packet exposes the dropped messages. This is what real feeds do — gaps go to a retransmit feed in production (we just log them).
+- **MoldUDP64 multi-message packets.** The replay binary packs up to N ITCH messages per UDP packet (configurable via `--max-per-packet`), each prefixed by a 2-byte length, all under a 20-byte session header. End-of-session is `messageCount == 0xFFFF`.
+- **Wire-to-match latency** is measured from "TSC just after recvmsg returns" (stamped by the network thread into the packet ref) to "TSC just before handleOrder enters" (stamped by the matching thread). Written to `wire_latencies.txt` alongside `latencies.txt`.
+
+Build & run:
+
+```sh
+# build
+cmake --build build         # produces order_matching, replay, run_tests
+
+# unit tests (46 of them)
+./build/run_tests
+
+# end-to-end on loopback (one terminal each)
+./build/order_matching --udp --bind 127.0.0.1 --port 30001
+./build/replay --file itch_data.NASDAQ_ITCH50 --target 127.0.0.1 --port 30001 \
+               --max-per-packet 16
+```
+
+For multicast: pick a 224.x address, `--multicast 239.1.1.1` on the engine, `./replay --multicast --target 239.1.1.1 ...`.
+
+## What's next (Linux-side)
+
+1. **(Critical) Benchmark Phase 5 on the tuned Linux box.** Pin the feed handler to one isolated core and the matching thread to another (`isolcpus=2,3` + `taskset -c 2 ./order_matching --udp ...` and `taskset -c 4 ./replay ...`). Report:
+   - matching-only p50/p99/p99.9 (should be ≈ unchanged from file-mode numbers)
+   - wire-to-match p50/p99/p99.9 (new; this is the headline UDP number)
+   - sustained msg/s before drops appear (run replay at `--rate max`, then back off)
+   The macOS smoke test showed 45–72 µs wire-to-match — that's almost entirely kernel UDP path on a non-isolated dev box. Tuned Linux should be 1–5 µs typical.
+2. **AF_XDP migration of the receive path.** Currently `recvmsg`-based; AF_XDP bypasses the kernel network stack via XDP sockets. Should drop wire-to-match p99 by another 3–10×. Drop in as an alternate `runFeedHandler` impl behind a CLI flag; keep the recvmsg path for comparison.
+3. **1-in-N timing sampling.** The two `tscNow()` calls per Add cost ~20-30 ns. Sample every 16th message; minor cosmetic mean improvement.
+4. **Multicast group join testing.** macOS loopback multicast is finicky; only Linux gives clean numbers. Verify IGMP join + multi-receiver fan-out works.
+5. **Re-profile after AF_XDP.** Bottleneck likely shifts back into matching.
 
 ## Working style
 
 - **Explain tradeoffs before deciding.** Especially on API shape, allocation strategy, per-vs-engine-wide, what to put in tests. He wants to be the one who picks. Surface options, recommend, ask.
 - **Don't auto-commit.** He'll say when.
 - **Don't run the full engine without asking** — it takes ~50 seconds but the ITCH file is 10.2 GB and disk space matters.
-- **Re-run `./build/run_tests` after non-trivial changes.** 35 tests, completes in ms.
+- **Re-run `./build/run_tests` after non-trivial changes.** 46 tests, completes in ms.
 - **Be concise.** Short status updates, results tables, no narration of internal deliberation.
 - **Memory files** at `~/.claude/projects/.../memory/` have full profiling history and machine gotchas.

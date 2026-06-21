@@ -60,7 +60,9 @@ class FlatHashMap {
   }
 
   void hugepages() {
+#ifdef MADV_HUGEPAGE
     madvise(table.data(), table.size() * sizeof(Entry), MADV_HUGEPAGE);
+#endif
   }
 
   void prefetch(K key) const {
