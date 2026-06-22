@@ -7,6 +7,20 @@
 
 #include "feed_handler_xdp.hpp"
 
+#include <cstdio>
+
+#ifndef __linux__
+// AF_XDP is Linux-only. On other platforms the stub exists only so the rest
+// of the engine links; calling --xdp on macOS will print an error and return.
+void runFeedHandlerXdp(const char* iface, uint16_t port, PacketPool&,
+                       SpscRing<PacketRef>&, FeedStats&, std::atomic<bool>&) {
+  (void)iface; (void)port;
+  fprintf(stderr,
+          "runFeedHandlerXdp: AF_XDP is Linux-only; this build does not "
+          "support --xdp.\n");
+}
+#else
+
 #include <arpa/inet.h>
 #include <errno.h>
 #include <linux/if_ether.h>
@@ -231,3 +245,5 @@ void runFeedHandlerXdp(const char* iface, uint16_t port,
   xsk_umem__delete(umem);
   free(umemArea);
 }
+
+#endif  // __linux__

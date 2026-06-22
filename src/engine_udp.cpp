@@ -54,6 +54,7 @@ void MatchingEngine::runUdp(const char* bindAddr, uint16_t port,
           cyclesPerNs * 1000.0);
 
   std::thread netThread([&]() {
+#ifdef __linux__
     if (netCore >= 0) {
       cpu_set_t cpuset;
       CPU_ZERO(&cpuset);
@@ -63,6 +64,9 @@ void MatchingEngine::runUdp(const char* bindAddr, uint16_t port,
       else
         fprintf(stderr, "runUdp: net thread pinned to core %d\n", netCore);
     }
+#else
+    (void)netCore;  // pthread_setaffinity_np is Linux-only
+#endif
     if (useXdp)
         runFeedHandlerXdp(iface, port, pool, ring, stats, stop);
     else

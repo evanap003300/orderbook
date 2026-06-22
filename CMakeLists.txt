@@ -29,7 +29,12 @@ add_executable(order_matching
 
 target_include_directories(order_matching PRIVATE include)
 target_compile_options(order_matching PRIVATE -O3 -g -Wall -Wextra -march=native)
-target_link_libraries(order_matching PRIVATE Threads::Threads xdp bpf)
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+  set(XDP_LIBS xdp bpf)
+else()
+  set(XDP_LIBS "")
+endif()
+target_link_libraries(order_matching PRIVATE Threads::Threads ${XDP_LIBS})
 
 # Replay sender: pushes the ITCH file out over UDP as MoldUDP64 packets.
 add_executable(replay
@@ -50,7 +55,7 @@ add_executable(run_tests
                 )
 
 target_include_directories(run_tests PRIVATE include)
-target_link_libraries(run_tests GTest::gtest_main Threads::Threads xdp bpf)
+target_link_libraries(run_tests GTest::gtest_main Threads::Threads ${XDP_LIBS})
 target_compile_options(run_tests PRIVATE -O3 -Wall -Wextra -march=native)
 
 gtest_discover_tests(run_tests)
