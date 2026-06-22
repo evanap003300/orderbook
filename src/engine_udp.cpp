@@ -2,6 +2,8 @@
 // the engine doesn't pull in <thread> or socket headers when only the file
 // path is used.
 
+#include <pthread.h>
+
 #include <atomic>
 #include <cstdio>
 #include <thread>
@@ -32,7 +34,7 @@ static double calibrateTscUdp() {
 }
 
 void MatchingEngine::runUdp(const char* bindAddr, uint16_t port,
-                            const char* multicastGroup) {
+                            const char* multicastGroup, int netCore) {
   // Sizing: ring size is power-of-two, ~4x typical burst depth. Pool slot
   // count must be >= ring slots so the producer never starves on free buffers
   // when the consumer hasn't yet returned them.
@@ -49,11 +51,16 @@ void MatchingEngine::runUdp(const char* bindAddr, uint16_t port,
   fprintf(stderr, "UDP mode: cyclesPerNs=%.4f (%.1f MHz)\n", cyclesPerNs,
           cyclesPerNs * 1000.0);
 
-  // LINUX-AGENT NOTE: pin the network thread to one isolated core
-  // (pthread_setaffinity_np) and the matching loop (this thread) to another.
-  // On the dev machine (macOS) we can't isolate cores, so we just run them
-  // unpinned for correctness checks.
   std::thread netThread([&]() {
+    if (netCore >= 0) {
+      cpu_set_t cpuset;
+      CPU_ZERO(&cpuset);
+      CPU_SET(static_cast<size_t>(netCore), &cpuset);
+      if (pthread_setaffinity_np(pthread_self(), sizeof(cpuset), &cpuset) != 0)
+        fprintf(stderr, "runUdp: failed to pin net thread to core %d\n", netCore);
+      else
+        fprintf(stderr, "runUdp: net thread pinned to core %d\n", netCore);
+    }
     runFeedHandler(bindAddr, port, multicastGroup, pool, ring, stats, stop);
   });
 

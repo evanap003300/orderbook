@@ -47,7 +47,9 @@ class MatchingEngine {
   // UDP mode entrypoint - lives in feed_handler.cpp. Spawns a network thread
   // that pushes packet-slot indices through an SPSC ring; this call returns
   // when the engine receives an end-of-session marker or `stop` is signalled.
-  void runUdp(const char* bindAddr, uint16_t port, const char* multicastGroup);
+  // netCore: CPU core to pin the network receive thread to (-1 = no pinning).
+  void runUdp(const char* bindAddr, uint16_t port, const char* multicastGroup,
+              int netCore = -1);
 
   // Process one ITCH message (already past the 2-byte length prefix; `data`
   // points at the message-type byte). Called by both file and UDP modes.

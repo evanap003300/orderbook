@@ -3,6 +3,7 @@
 
 #include <atomic>
 #include <cstddef>
+#include <cstdlib>
 #include <new>
 #include <vector>
 
