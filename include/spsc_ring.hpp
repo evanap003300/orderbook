@@ -14,11 +14,7 @@
 // participating cores; the consumer busy-spins with PAUSE so the matching
 // thread should live on an isolated core to make that cost free.
 
-#ifdef __cpp_lib_hardware_interference_size
-constexpr size_t kCacheLineSize = std::hardware_destructive_interference_size;
-#else
 constexpr size_t kCacheLineSize = 64;
-#endif
 
 // Portable CPU PAUSE / yield hint used inside the busy-wait. On x86 this maps
 // to the `pause` instruction (lowers contention on the inter-core bus and
