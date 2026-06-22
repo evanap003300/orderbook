@@ -24,8 +24,25 @@ struct DeleteOrder {
   uint32_t orderReferenceNumberLow;
 };
 
+// Parsed form of 'E' (Order Executed), 'C' (Executed With Price), and
+// 'X' (Order Cancel). All three carry the same fields we care about.
+struct OrderExecutedMsg {
+  uint64_t orderRef;
+  uint32_t shares;  // executedShares for E/C, cancelledShares for X
+};
+
+// Parsed form of 'U' (Order Replace).
+struct OrderReplaceMsg {
+  uint64_t originalOrderRef;
+  uint64_t newOrderRef;
+  uint32_t shares;
+  uint32_t price;
+};
+
 class ItchParser {
  public:
-  Order readAddOrder(const char*& data);
-  DeleteOrder readDeleteOrder(const char*& data);
+  Order            readAddOrder(const char*& data);
+  DeleteOrder      readDeleteOrder(const char*& data);
+  OrderExecutedMsg readOrderExecuted(const char*& data);  // E, C, X
+  OrderReplaceMsg  readOrderReplace(const char*& data);   // U
 };

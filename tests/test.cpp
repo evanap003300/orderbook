@@ -6,6 +6,7 @@
 
 #include "flat_hash_map.hpp"
 #include "itch.hpp"
+#include "matching_engine.hpp"
 #include "order_pool.hpp"
 #include "orderbook.hpp"
 
@@ -721,4 +722,178 @@ TEST(MoldUdp64Test, BigEndianSequenceNumberAcrossBoundary) {
   MoldHeader h;
   parseMoldHeader(packet, h);
   EXPECT_EQ(h.sequenceNumber, seq);
+}
+
+// ============================================================================
+// Full ITCH message set — F, E, C, X, U
+//
+// Tests go through MatchingEngine::processMessage() with hand-crafted wire
+// bytes so we exercise the parsers AND the orderMap management together.
+// Behaviour is verified by examining scratch.executedOrders / removedRefs
+// after subsequent Add messages, which gives us a window into book state
+// without needing to expose private engine internals.
+// ============================================================================
+
+// Wire-message builder helpers. Layout after the type byte (which is buf[0]):
+//   buf[1..2]  stockLocate  (uint16 BE)
+//   buf[3..4]  trackingNum  (uint16 BE, zeroed)
+//   buf[5..10] timestamp    (6 bytes, zeroed)
+//   buf[11..18] orderRef    (uint64 BE)
+//   ... message-specific fields ...
+struct TestEngine {
+  MatchingEngine eng;
+  EngineScratch  scratch;
+
+  static void w16(char* b, uint16_t v) {
+    b[0] = (char)((v >> 8) & 0xFF); b[1] = (char)(v & 0xFF);
+  }
+  static void w32(char* b, uint32_t v) {
+    b[0]=(char)(v>>24); b[1]=(char)(v>>16); b[2]=(char)(v>>8); b[3]=(char)v;
+  }
+  static void w64(char* b, uint64_t v) {
+    w32(b, (uint32_t)(v >> 32)); w32(b + 4, (uint32_t)(v & 0xFFFFFFFF));
+  }
+
+  // 'A'  body = 36 bytes; 'F' body = 40 bytes (4-byte attribution appended)
+  void sendAdd(char type, uint16_t loc, uint64_t ref, char side,
+               uint32_t shares, uint32_t price) {
+    char buf[40]; memset(buf, 0, sizeof(buf));
+    buf[0] = type; w16(buf + 1, loc);
+    w64(buf + 11, ref); buf[19] = side;
+    w32(buf + 20, shares); w32(buf + 32, price);
+    eng.processMessage(buf, type == 'F' ? 40 : 36, scratch, 0);
+  }
+
+  void sendDelete(uint64_t ref) {
+    char buf[19]; memset(buf, 0, sizeof(buf));
+    buf[0] = 'D'; w64(buf + 11, ref);
+    eng.processMessage(buf, 19, scratch, 0);
+  }
+
+  // 'E' body = 31 bytes; 'C' body = 36 bytes; 'X' body = 23 bytes.
+  // All three share orderRef at [11] and shares at [19].
+  void sendExecOrCancel(char type, uint64_t ref, uint32_t shares) {
+    char buf[36]; memset(buf, 0, sizeof(buf));
+    buf[0] = type; w64(buf + 11, ref); w32(buf + 19, shares);
+    int len = (type == 'X') ? 23 : (type == 'E') ? 31 : 36;
+    eng.processMessage(buf, len, scratch, 0);
+  }
+
+  // 'U' body = 35 bytes: origRef at [11], newRef at [19], shares at [27], price at [31]
+  void sendReplace(uint64_t origRef, uint64_t newRef, uint32_t shares,
+                   uint32_t price, uint16_t loc = 1) {
+    char buf[35]; memset(buf, 0, sizeof(buf));
+    buf[0] = 'U'; w16(buf + 1, loc);
+    w64(buf + 11, origRef); w64(buf + 19, newRef);
+    w32(buf + 27, shares);  w32(buf + 31, price);
+    eng.processMessage(buf, 35, scratch, 0);
+  }
+};
+
+// 'F' — Add Order with MPID. The 4-byte attribution is never parsed; the order
+// should rest and be matchable exactly like an 'A' message.
+TEST(ItchFullSetTest, FAddWithMpidRestsAndMatches) {
+  TestEngine te;
+  te.sendAdd('F', 1, /*ref=*/1, 'S', 100, 1000);
+  te.sendAdd('A', 1, /*ref=*/2, 'B', 100, 1000);
+  ASSERT_EQ(te.scratch.executedOrders.size(), 1u);
+  EXPECT_EQ(te.scratch.executedOrders[0].executed_shares, 100u);
+}
+
+// 'E' partial — after executing 40 of 100 shares, a subsequent buy of the
+// remaining 60 should fully consume the resting sell.
+TEST(ItchFullSetTest, EPartialExecution) {
+  TestEngine te;
+  te.sendAdd('A', 1, 1, 'S', 100, 1000);
+  te.sendExecOrCancel('E', 1, 40);
+  // 60 shares remain; buy exactly 60 → full match, sell removed.
+  te.sendAdd('A', 1, 2, 'B', 60, 1000);
+  ASSERT_EQ(te.scratch.executedOrders.size(), 1u);
+  EXPECT_EQ(te.scratch.executedOrders[0].executed_shares, 60u);
+  ASSERT_EQ(te.scratch.removedRefs.size(), 1u);  // sell fully consumed
+  // Book is now empty; next buy rests without matching.
+  te.sendAdd('A', 1, 3, 'B', 1, 1000);
+  EXPECT_TRUE(te.scratch.executedOrders.empty());
+}
+
+// 'E' full — executing all shares removes the order; subsequent orders don't match.
+TEST(ItchFullSetTest, EFullExecutionRemovesOrder) {
+  TestEngine te;
+  te.sendAdd('A', 1, 1, 'S', 100, 1000);
+  te.sendExecOrCancel('E', 1, 100);
+  te.sendAdd('A', 1, 2, 'B', 1, 1000);
+  EXPECT_TRUE(te.scratch.executedOrders.empty());
+}
+
+// 'C' — Order Executed With Price. Same book effect as 'E'; the extra fields
+// (match number, printable flag, execution price) are reporting-only.
+TEST(ItchFullSetTest, CExecutedWithPriceRemovesOrder) {
+  TestEngine te;
+  te.sendAdd('A', 1, 1, 'S', 50, 1000);
+  te.sendExecOrCancel('C', 1, 50);
+  te.sendAdd('A', 1, 2, 'B', 1, 1000);
+  EXPECT_TRUE(te.scratch.executedOrders.empty());
+}
+
+// 'X' partial cancel — reduce shares; remaining quantity still rests and matches.
+TEST(ItchFullSetTest, XPartialCancelReducesShares) {
+  TestEngine te;
+  te.sendAdd('A', 1, 1, 'S', 100, 1000);
+  te.sendExecOrCancel('X', 1, 40);   // cancel 40 → 60 remain
+  te.sendAdd('A', 1, 2, 'B', 60, 1000);
+  ASSERT_EQ(te.scratch.executedOrders.size(), 1u);
+  EXPECT_EQ(te.scratch.executedOrders[0].executed_shares, 60u);
+  ASSERT_EQ(te.scratch.removedRefs.size(), 1u);
+}
+
+// 'X' full cancel — cancelling all shares removes the order from the book.
+TEST(ItchFullSetTest, XFullCancelRemovesOrder) {
+  TestEngine te;
+  te.sendAdd('A', 1, 1, 'S', 100, 1000);
+  te.sendExecOrCancel('X', 1, 100);
+  te.sendAdd('A', 1, 2, 'B', 1, 1000);
+  EXPECT_TRUE(te.scratch.executedOrders.empty());
+}
+
+// 'U' replace to a new (lower) ask price; a resting buy at the new price matches.
+TEST(ItchFullSetTest, UReplaceMovesToNewPrice) {
+  TestEngine te;
+  te.sendAdd('A', 1, 1, 'S', 100, 1000);
+  te.sendReplace(/*orig=*/1, /*new=*/2, 100, /*price=*/800);
+  // Buy at 900 should cross the new ask at 800.
+  te.sendAdd('A', 1, 3, 'B', 100, 900);
+  ASSERT_EQ(te.scratch.executedOrders.size(), 1u);
+  EXPECT_EQ(te.scratch.executedOrders[0].executed_shares, 100u);
+}
+
+// 'U' triggers an immediate match — replacing the ask at a price that crosses
+// a resting bid causes execution inside the Replace handler.
+TEST(ItchFullSetTest, UReplaceTriggersImmediateMatch) {
+  TestEngine te;
+  te.sendAdd('A', 1, 1, 'B', 100, 900);   // bid at 900 rests
+  te.sendAdd('A', 1, 2, 'S', 100, 1000);  // ask at 1000, no cross yet
+  // Replace ask: move to 850 < bid 900 → match fires inside processMessage.
+  te.sendReplace(/*orig=*/2, /*new=*/3, 100, /*price=*/850);
+  ASSERT_EQ(te.scratch.executedOrders.size(), 1u);
+  EXPECT_EQ(te.scratch.executedOrders[0].executed_shares, 100u);
+}
+
+// 'U' inherits the original order's side. Replacing a sell should produce a
+// sell at the new price, not a buy.
+TEST(ItchFullSetTest, UReplaceInheritesSide) {
+  TestEngine te;
+  te.sendAdd('A', 1, 1, 'S', 100, 1000);       // sell at 1000
+  te.sendReplace(1, 2, 50, /*price=*/900);      // new sell at 900, 50 shares
+  // A buy at 1000 must cross the new sell at 900 (not act as another buy).
+  te.sendAdd('A', 1, 3, 'B', 50, 1000);
+  ASSERT_EQ(te.scratch.executedOrders.size(), 1u);
+  EXPECT_EQ(te.scratch.executedOrders[0].executed_shares, 50u);
+}
+
+// E/X on an unknown orderRef should be a silent no-op (no crash).
+TEST(ItchFullSetTest, UnknownRefIsNoOp) {
+  TestEngine te;
+  EXPECT_NO_THROW(te.sendExecOrCancel('E', 99999, 100));
+  EXPECT_NO_THROW(te.sendExecOrCancel('X', 99999, 100));
+  EXPECT_NO_THROW(te.sendReplace(99999, 100000, 50, 1000));
 }

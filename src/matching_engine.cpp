@@ -68,13 +68,15 @@ static double calibrateTsc() {
 void MatchingEngine::processMessage(const char* data, uint16_t messageLength,
                                     EngineScratch& scratch,
                                     uint64_t tWireCycles) {
-  (void)messageLength;  // unused for A/D; future message types may need it
+  (void)messageLength;
   ItchParser parser;
   char messageType = *data;
   data++;
 
   switch (messageType) {
-    case 'A': {
+    case 'A':
+    case 'F': {  // 'F' is Add Order with MPID; wire layout identical to 'A'
+                 // plus a trailing 4-byte attribution we never parse.
       uint16_t stockLocate =
           ntohs(*reinterpret_cast<const uint16_t*>(data));
       Order order = parser.readAddOrder(data);
@@ -111,6 +113,57 @@ void MatchingEngine::processMessage(const char* data, uint16_t messageLength,
       if (!found) break;
       orderBooks[found->stockLocate].removeByIndex(found->poolIdx);
       orderMap.erase(orderReferenceNumber);
+      break;
+    }
+    case 'E':  // Order Executed
+    case 'C':  // Order Executed With Price (execution price is reporting-only)
+    case 'X': {  // Order Cancel (partial or full share reduction)
+      OrderExecutedMsg msg = parser.readOrderExecuted(data);
+      OrderLocation* loc = orderMap.find(msg.orderRef);
+      if (!loc) break;
+      PoolNode& node = pool[loc->poolIdx];
+      if (msg.shares >= node.order.shares) {
+        // Fully consumed: remove from price level, free pool slot, drop from map.
+        orderBooks[loc->stockLocate].removeByIndex(loc->poolIdx);
+        orderMap.erase(msg.orderRef);
+      } else {
+        // Partially consumed: update shares in place. The order stays at the
+        // same position in its price-level queue (FIFO priority preserved).
+        node.order.shares -= msg.shares;
+      }
+      break;
+    }
+    case 'U': {  // Order Replace: cancel original, re-add at new price/qty.
+      OrderReplaceMsg rep = parser.readOrderReplace(data);
+      OrderLocation* loc = orderMap.find(rep.originalOrderRef);
+      if (!loc) break;
+      uint16_t stockLocate = loc->stockLocate;
+      // Inherit side from the original before removing it.
+      char side = pool[loc->poolIdx].order.buySellIndicator;
+      orderBooks[stockLocate].removeByIndex(loc->poolIdx);
+      orderMap.erase(rep.originalOrderRef);
+
+      Order newOrder;
+      newOrder.orderReferenceNumberHigh =
+          static_cast<uint32_t>(rep.newOrderRef >> 32);
+      newOrder.orderReferenceNumberLow =
+          static_cast<uint32_t>(rep.newOrderRef);
+      newOrder.buySellIndicator = side;
+      newOrder.shares = rep.shares;
+      newOrder.price  = rep.price;
+
+      scratch.removedRefs.clear();
+      scratch.executedOrders.clear();
+      uint32_t restingIdx;
+      orderBooks[stockLocate].handleOrder(newOrder, restingIdx,
+                                          scratch.removedRefs,
+                                          scratch.executedOrders);
+      for (uint64_t ref : scratch.removedRefs) {
+        orderMap.erase(ref);
+      }
+      if (restingIdx != INVALID_INDEX) {
+        orderMap.insert(rep.newOrderRef, {stockLocate, restingIdx});
+      }
       break;
     }
     default:
@@ -168,7 +221,8 @@ void MatchingEngine::run() {
     const char* nextPkt = data + messageLength;
     if (nextPkt + 21 <= end) {
       char nt = nextPkt[2];
-      if (nt == 'A' || nt == 'D') {
+      if (nt == 'A' || nt == 'F' || nt == 'D' ||
+          nt == 'E' || nt == 'C' || nt == 'X' || nt == 'U') {
         uint32_t hi, lo;
         memcpy(&hi, nextPkt + 13, 4);
         memcpy(&lo, nextPkt + 17, 4);

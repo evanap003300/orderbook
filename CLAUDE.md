@@ -7,7 +7,7 @@ A C++17 NASDAQ ITCH 5.0 matching engine focused on low-latency order processing.
 ```sh
 cmake -S . -B build              # only needed first time / after CMakeLists changes
 cmake --build build
-./build/run_tests                # 46 tests, completes in ms
+./build/run_tests                # 56 tests, completes in ~1s
 ./build/order_matching           # processes itch_data.NASDAQ_ITCH50, writes latencies.txt (~50s)
 ```
 
@@ -51,7 +51,7 @@ src/
   feed_handler_xdp.cpp  AF_XDP UMEM+socket setup, busy-poll RX ring, Eth/IP/UDP parse.
   replay.cpp            Standalone binary: ITCH file -> MoldUDP64 packets over UDP.
   main.cpp              Entry point: --file (default) | --udp | --udp --afxdp --iface IFNAME.
-tests/test.cpp          FlatHashMap + OrderBook + SpscRing + PacketPool + MoldUDP64.
+tests/test.cpp          FlatHashMap + OrderBook + SpscRing + PacketPool + MoldUDP64 + full ITCH set.
 ```
 
 The pieces:
@@ -78,6 +78,7 @@ These are non-obvious and worth understanding before changing anything:
 7. **`FlatHashMap` uses identity hash (`key & mask`) for `orderMap`.** ITCH order reference numbers are globally near-sequential (min=92, max=264M over a day). Identity hash places consecutive refs in adjacent slots → live working set is a ~33 MB migrating band rather than scattered across 128 MB → much better cache locality. `bool Identity` is a compile-time template parameter.
 8. **`FlatHashMap::erase` uses Knuth's Algorithm R.** The naive Robin-Hood backward-shift erase stops when it hits an element at its home position, leaving holes that break wrap-around probe chains. With identity hash + sequential refs wrapping every ~8.4M orders, this caused lost keys → table filled with ghosts → infinite loop. Algorithm R continues scanning past unmovable elements. Regression test: `IdentityHashEraseWrapAroundChain`.
 9. **orderMap is 8.4M slots (128 MB), not 33.5M (512 MB).** Peak live orders measured at 2.1M (~25% load). Smaller table means most of the working set fits in fewer cache lines. Direct-indexed array ruled out: ref span 264M vs 2.1M live → 2 GB mostly-dead array.
+10. **Full ITCH 5.0 message coverage.** `A`/`F` add orders (MPID attribution ignored); `D` deletes; `E`/`C` execute (partial or full — shares updated in-place for partial, `removeByIndex` for full); `X` cancels (same logic as execute); `U` replaces (cancel original + re-add at new price/qty, inheriting side from the pool node before removal — the replacement can immediately trigger matches at the new price).
 
 ## Current performance
 
