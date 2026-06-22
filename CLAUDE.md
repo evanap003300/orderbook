@@ -82,17 +82,29 @@ These are non-obvious and worth understanding before changing anything:
 
 ## Current performance
 
-Measured over 163M Add messages on a full NASDAQ ITCH 5.0 trading day (01/30/2019), Linux i5-8350U, isolated core 3, performance governor @ 3.6 GHz, TSC timing:
+Measured over 162.8M Add messages on a full NASDAQ ITCH 5.0 trading day (01/30/2019), Linux i5-8350U, isolated core 3, performance governor @ 3.6 GHz, TSC timing:
+
+**Matching latency (file mode):**
 
 | Stat | Value |
 |------|------:|
-| mean | 82.4 ns |
-| p50 | 56 ns |
-| p90 | 152 ns |
-| p99 | 418 ns |
-| p99.9 | 1,492 ns |
-| p99.99 | ~5,900 ns |
+| mean | 85.5 ns |
+| p50 | 53 ns |
+| p90 | 170 ns |
+| p99 | 437 ns |
+| p99.9 | 2,021 ns |
+| p99.99 | 6,466 ns |
 | wall time | 49.4 s for the full 10.2 GB file |
+
+**Wire-to-match latency (UDP/recvmsg, isolated cores 2+3, max rate):**
+
+| Stat | Value |
+|------|------:|
+| p50 | 1,127 ns |
+| p90 | 2,226 ns |
+| p99 | 6,715 ns |
+
+(Tail beyond p99 reflects ring queue buildup at max replay rate — not a latency spike in the engine itself. At 2M msg/s the tail cleans up to ~6µs p99.)
 
 Pre-optimization Linux baseline (same machine, same file, before this work): mean 145.6 ns, p99 818 ns, wall 102.2 s. **Net gain: ~2× across the distribution body.**
 
