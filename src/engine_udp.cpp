@@ -9,6 +9,7 @@
 #include <thread>
 
 #include "feed_handler.hpp"
+#include "feed_handler_xdp.hpp"
 #include "matching_engine.hpp"
 #include "moldudp64.hpp"
 #include "packet_pool.hpp"
@@ -34,7 +35,8 @@ static double calibrateTscUdp() {
 }
 
 void MatchingEngine::runUdp(const char* bindAddr, uint16_t port,
-                            const char* multicastGroup, int netCore) {
+                            const char* multicastGroup, int netCore,
+                            bool useXdp, const char* iface) {
   // Sizing: ring size is power-of-two, ~4x typical burst depth. Pool slot
   // count must be >= ring slots so the producer never starves on free buffers
   // when the consumer hasn't yet returned them.
@@ -61,7 +63,10 @@ void MatchingEngine::runUdp(const char* bindAddr, uint16_t port,
       else
         fprintf(stderr, "runUdp: net thread pinned to core %d\n", netCore);
     }
-    runFeedHandler(bindAddr, port, multicastGroup, pool, ring, stats, stop);
+    if (useXdp)
+        runFeedHandlerXdp(iface, port, pool, ring, stats, stop);
+    else
+        runFeedHandler(bindAddr, port, multicastGroup, pool, ring, stats, stop);
   });
 
   EngineScratch scratch;

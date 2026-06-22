@@ -44,12 +44,21 @@ class MatchingEngine {
   // (Unchanged behaviour - this is the existing benchmark path.)
   void run();
 
-  // UDP mode entrypoint - lives in feed_handler.cpp. Spawns a network thread
-  // that pushes packet-slot indices through an SPSC ring; this call returns
-  // when the engine receives an end-of-session marker or `stop` is signalled.
-  // netCore: CPU core to pin the network receive thread to (-1 = no pinning).
+  // UDP mode entrypoint. Spawns a network receive thread and processes packets
+  // until end-of-session or `stop` is signalled.
+  //
+  // recvmsg path (default):
+  //   bindAddr      – address to bind on ("0.0.0.0" for any)
+  //   multicastGroup – nullptr for unicast or a multicast group to IGMP-join
+  //
+  // AF_XDP path (useXdp=true):
+  //   iface         – network interface name, e.g. "lo" or "eth0"
+  //   bindAddr / multicastGroup are unused
+  //   Requires root or CAP_NET_ADMIN + CAP_BPF
+  //
+  // netCore: CPU core for the receive thread (-1 = no pinning).
   void runUdp(const char* bindAddr, uint16_t port, const char* multicastGroup,
-              int netCore = -1);
+              int netCore = -1, bool useXdp = false, const char* iface = nullptr);
 
   // Process one ITCH message (already past the 2-byte length prefix; `data`
   // points at the message-type byte). Called by both file and UDP modes.

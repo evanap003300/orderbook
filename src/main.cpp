@@ -18,6 +18,8 @@ int main(int argc, char** argv) {
   uint16_t port = 30001;
   std::string multicastGroup;
   int netCore = -1;
+  bool useXdp = false;
+  std::string iface;
 
   for (int i = 1; i < argc; ++i) {
     std::string k = argv[i];
@@ -30,6 +32,8 @@ int main(int argc, char** argv) {
     else if (k == "--port") port = static_cast<uint16_t>(std::stoi(next("--port")));
     else if (k == "--multicast") multicastGroup = next("--multicast");
     else if (k == "--net-core") netCore = std::stoi(next("--net-core"));
+    else if (k == "--afxdp") useXdp = true;
+    else if (k == "--iface") iface = next("--iface");
     else { std::cerr << "unknown arg: " << argv[i] << "\n"; return 1; }
   }
 
@@ -37,9 +41,13 @@ int main(int argc, char** argv) {
 
   if (udpMode) {
     std::cout << "Running matching engine in UDP mode...\n";
+    if (useXdp && iface.empty()) {
+      std::cerr << "--afxdp requires --iface IFNAME (e.g. --iface lo)\n";
+      return 1;
+    }
     engine.runUdp(bindAddr.c_str(), port,
                   multicastGroup.empty() ? nullptr : multicastGroup.c_str(),
-                  netCore);
+                  netCore, useXdp, iface.empty() ? nullptr : iface.c_str());
   } else {
     std::cout << "Running matching engine (file mode)...\n";
     engine.run();

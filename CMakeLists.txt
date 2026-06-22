@@ -23,12 +23,13 @@ add_executable(order_matching
                 src/matching_engine.cpp
                 src/engine_udp.cpp
                 src/feed_handler.cpp
+                src/feed_handler_xdp.cpp
                 src/orderbook.cpp
                 )
 
 target_include_directories(order_matching PRIVATE include)
 target_compile_options(order_matching PRIVATE -O3 -g -Wall -Wextra -march=native)
-target_link_libraries(order_matching PRIVATE Threads::Threads)
+target_link_libraries(order_matching PRIVATE Threads::Threads xdp bpf)
 
 # Replay sender: pushes the ITCH file out over UDP as MoldUDP64 packets.
 add_executable(replay
@@ -44,11 +45,12 @@ add_executable(run_tests
                 src/matching_engine.cpp
                 src/engine_udp.cpp
                 src/feed_handler.cpp
+                src/feed_handler_xdp.cpp
                 src/orderbook.cpp
                 )
 
 target_include_directories(run_tests PRIVATE include)
-target_link_libraries(run_tests GTest::gtest_main Threads::Threads)
+target_link_libraries(run_tests GTest::gtest_main Threads::Threads xdp bpf)
 target_compile_options(run_tests PRIVATE -O3 -Wall -Wextra -march=native)
 
 gtest_discover_tests(run_tests)
