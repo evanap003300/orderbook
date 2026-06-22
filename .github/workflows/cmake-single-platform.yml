@@ -22,9 +22,10 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
-    - name: Install Linting Tools
+    - name: Install dependencies
       run: |
         sudo apt-get update
+        sudo apt-get install -y libxdp-dev libbpf-dev
 
     - name: Configure CMake
       run: cmake -B ${{github.workspace}}/build -DCMAKE_BUILD_TYPE=${{env.BUILD_TYPE}} -DCMAKE_CXX_FLAGS="-fsanitize=address -g"
