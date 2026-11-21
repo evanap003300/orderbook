@@ -1,4 +1,5 @@
 build/
 *.NASDAQ_ITCH50
 latencies*.txt
+wire_latencies.txt
 __pycache__/
