@@ -6,10 +6,10 @@
 //   ./replay --file PATH [--target 127.0.0.1] [--port 30001]
 //            [--max-per-packet 16] [--rate max|<msg/s>] [--multicast]
 //
-// LINUX-AGENT NOTE: For multicast, set --multicast and pick a 224-239.x.x.x
-// target. On macOS multicast on loopback is finicky; for dev we recommend
-// unicast on 127.0.0.1. On Linux with isolcpus, run this on a separate core
-// from the engine (taskset -c <core> ./replay ...).
+// For multicast, set --multicast and pick a 224-239.x.x.x target. Multicast on
+// loopback is finicky on macOS, so unicast on 127.0.0.1 is easier during
+// development. On Linux with isolcpus, run this on a separate core from the
+// engine (taskset -c <core> ./replay ...).
 
 #include <arpa/inet.h>
 #include <fcntl.h>

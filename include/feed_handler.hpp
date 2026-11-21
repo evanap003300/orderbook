@@ -33,10 +33,8 @@ struct FeedStats {
 // `stats`: counters reported back to the engine.
 // `stop`: external stop flag for clean shutdown.
 //
-// LINUX-AGENT NOTE: This routine uses POSIX BSD sockets. On Linux, add a
-// follow-up AF_XDP receive path here that bypasses the kernel network stack.
-// Compare wire-to-match latency between the two; expect a large p99/tail
-// reduction with AF_XDP because no syscall is on the receive path.
+// This is the POSIX socket path (recvmsg). The AF_XDP path in
+// feed_handler_xdp.hpp feeds the same ring without a syscall per packet.
 void runFeedHandler(const char* bindAddr, uint16_t port,
                     const char* multicastGroup, PacketPool& pool,
                     SpscRing<PacketRef>& ring, FeedStats& stats,

@@ -6,8 +6,8 @@
 #include <cstring>
 #include <vector>
 
-// LINUX-AGENT NOTE: PacketPool is the buffer arena that the SPSC ring carries
-// indices into. The producer (net thread) reserves a free index, fills it
+// PacketPool is the buffer arena that the SPSC ring carries indices into.
+// The producer (net thread) reserves a free index, fills it
 // with the received UDP packet, and pushes the index. The consumer (matching
 // thread) pops the index, processes the packet, and returns the index. No
 // allocation in the hot path. Returned indices are reused via a Treiber-stack

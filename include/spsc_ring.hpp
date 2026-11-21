@@ -7,7 +7,7 @@
 #include <new>
 #include <vector>
 
-// LINUX-AGENT NOTE: This SPSC ring is the spine of the UDP feed pipeline.
+// This SPSC ring is the spine of the UDP feed pipeline.
 // Net thread (producer) pushes packet buffer indices; matching thread
 // (consumer) pops them. Cache-line-padded head/tail prevents false sharing
 // between the two cores. Pair this with isolcpus + taskset for the two
